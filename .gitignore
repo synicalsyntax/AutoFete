@@ -1,0 +1,10 @@
+# .NET build outputs
+bin/
+obj/
+
+# Local IDE and user settings
+.vs/
+.idea/
+*.user
+*.suo
+*.rsuser

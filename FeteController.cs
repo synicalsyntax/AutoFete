@@ -5,8 +5,7 @@ using System.Numerics;
 namespace AutoFete;
 
 internal sealed class FeteController(IClientState clientState, IObjectTable objects, IFateTable fates,
-    Navmesh navmesh, GameActions actions, FeteActionAutomation automation, Configuration config,
-    Action saveConfig)
+    Navmesh navmesh, GameActions actions, FeteActionAutomation automation)
 {
     private ushort? currentFateId;
     private FeteStage? currentStage;
@@ -22,7 +21,8 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
     public FeteStage? CurrentStage => currentStage;
     public bool WantsHandinDialogs => autoJoin && currentFateId is { } id &&
                                        (currentStage is FeteStage.SofterStuff or FeteStage.ShearYak or
-                                           FeteStage.ToyHunter or FeteStage.Presents) && actions.IsJoined(id);
+                                           FeteStage.ToyHunter or FeteStage.Presents) &&
+                                      (currentStage == FeteStage.SofterStuff || actions.IsJoined(id));
 
     public bool Start(RunMode mode, bool join = false)
     {
@@ -99,14 +99,14 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
 
         var visible = fates
             .Select(f => (Fate: f, Stage: FeteCatalog.Find(f.FateId)))
-            .Where(x => x.Stage != null && x.Fate.State is FateState.Preparing or FateState.Running)
+            .Where(x => x.Stage != null &&
+                        x.Fate.State is FateState.Preparing or FateState.Running or FateState.Ending)
             .OrderBy(x => Array.FindIndex(FeteCatalog.Stages, s => s.Stage == x.Stage!.Value.Stage))
             .ToArray();
 
-        foreach (var fete in visible)
-            RememberLocation(fete.Stage!.Value.Stage, fete.Fate.Position, fete.Fate.Radius);
-
         var active = visible.FirstOrDefault(x => x.Fate.State == FateState.Running);
+        if (active.Fate == null)
+            active = visible.FirstOrDefault(x => x.Fate.State == FateState.Ending);
 
         if (active.Fate == null)
         {
@@ -136,8 +136,9 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
             var preparing = visible.FirstOrDefault(x => x.Fate.State == FateState.Preparing);
             if (preparing.Fate != null)
             {
-                MoveToward(preparing.Stage!.Value.Name, preparing.Fate.Position, preparing.Fate.Radius,
-                    "preparing Fête");
+                if (TryGetStageApproach(preparing.Stage!.Value.Stage, out var approach))
+                    MoveToward(preparing.Stage!.Value.Name, approach.Position, approach.Radius,
+                        "preparing Fête");
                 return;
             }
 
@@ -145,17 +146,9 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
             {
                 var nextStage = FeteCatalog.Next(previous);
                 var name = FeteCatalog.Stages.First(x => x.Stage == nextStage).Name;
-                if (config.StageLocations != null &&
-                    config.StageLocations.TryGetValue(nextStage.ToString(), out var next))
+                if (TryGetStageApproach(nextStage, out var next))
                 {
-                    MoveToward(name, new Vector3(next.X, next.Y, next.Z), next.Radius,
-                        "observed Fête location");
-                    return;
-                }
-
-                if (FeteCatalog.ProvisionalWaypoint(nextStage) is { } waypoint)
-                {
-                    MoveToward(name, waypoint, 3f, "provisional waypoint");
+                    MoveToward(name, next.Position, next.Radius, "Fête location");
                     return;
                 }
             }
@@ -192,43 +185,53 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
                 routeDestination = null;
                 joinedCurrentStage = true;
             }
-            Status = automation.Tick(currentStage!.Value, active.Fate.FateId);
+            Status = automation.Tick(currentStage!.Value, active.Fate.FateId, active.Fate.HandInCount);
+            return;
+        }
+
+        if (currentStage == FeteStage.SofterStuff && joinedCurrentStage)
+        {
+            Status = automation.Tick(currentStage.Value, active.Fate.FateId, active.Fate.HandInCount);
             return;
         }
 
         joinedCurrentStage = false;
 
-        var joinDistance = Math.Max(2f, active.Fate.Radius - 3f);
-        if (Vector3.Distance(playerPosition, active.Fate.Position) > joinDistance)
+        if (!TryGetStageApproach(currentStage!.Value, out var joinApproach))
         {
-            if (!navmesh.IsMoving()) navmesh.MoveNear(active.Fate.Position, joinDistance);
-            Status = "Moving into the Fête area.";
+            Status = "No waypoint is configured for this Fête stage.";
+            return;
+        }
+        if (Vector3.Distance(playerPosition, joinApproach.Position) > Math.Max(2f, joinApproach.Radius - 3f))
+        {
+            MoveToward(active.Stage!.Value.Name, joinApproach.Position, joinApproach.Radius,
+                "join location");
             return;
         }
 
         if (navmesh.IsMoving()) navmesh.Stop();
         actions.TryJoin(active.Fate.FateId, playerPosition, active.Fate.Position, active.Fate.Radius);
-        Status = "Joining the Fête; waiting for game confirmation.";
+        if (currentStage == FeteStage.SofterStuff)
+        {
+            // Materials and toy interactions can begin without waiting for the
+            // FATE participant status to appear after the join request.
+            joinedCurrentStage = true;
+            Status = automation.Tick(currentStage.Value, active.Fate.FateId, active.Fate.HandInCount);
+            return;
+        }
+        Status = $"Joining the Fête: {actions.LastJoinAttempt} Waiting for game confirmation.";
     }
 
-    private void RememberLocation(FeteStage stage, Vector3 position, float radius)
+    private static bool TryGetStageApproach(FeteStage stage, out (Vector3 Position, float Radius) approach)
     {
-        if (!IsUsablePosition(position))
-            return;
-
-        config.StageLocations ??= [];
-        var key = stage.ToString();
-        var savedRadius = float.IsFinite(radius) ? Math.Max(radius, 3f) : 3f;
-        if (config.StageLocations.TryGetValue(key, out var old) &&
-            Vector3.DistanceSquared(new Vector3(old.X, old.Y, old.Z), position) < 4f &&
-            Math.Abs(old.Radius - savedRadius) < 2f)
-            return;
-
-        config.StageLocations[key] = new StageLocation
+        if (FeteCatalog.ProvisionalWaypoint(stage) is { } waypoint)
         {
-            X = position.X, Y = position.Y, Z = position.Z, Radius = savedRadius,
-        };
-        saveConfig();
+            approach = (waypoint, 6f);
+            return true;
+        }
+
+        approach = default;
+        return false;
     }
 
     private void MoveToward(string name, Vector3 position, float radius, string source)

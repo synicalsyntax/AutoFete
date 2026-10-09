@@ -5,7 +5,6 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using Dalamud.Bindings.ImGui;
-using Newtonsoft.Json;
 using System.Numerics;
 
 namespace AutoFete;
@@ -19,7 +18,6 @@ public sealed class Plugin : IDalamudPlugin
     private readonly IPluginLog log;
     private readonly IClientState clientState;
     private readonly IFateTable fates;
-    private readonly ITargetManager targets;
     private readonly Navmesh navmesh;
     private readonly GameActions actions;
     private readonly FeteActionAutomation automation;
@@ -50,15 +48,26 @@ public sealed class Plugin : IDalamudPlugin
         this.log = log;
         this.clientState = clientState;
         this.fates = fates;
-        this.targets = targets;
-        config = LoadConfig(pluginInterface, log);
+        var configPath = pluginInterface.ConfigFile.FullName;
+        var loadedConfig = false;
+        try
+        {
+            config = Configuration.Load(configPath);
+            loadedConfig = true;
+        }
+        catch (Exception e)
+        {
+            config = new Configuration();
+            log.Error(e, "Could not read AutoFete settings");
+        }
+        if (loadedConfig)
+            SaveConfig();
         navmesh = new Navmesh(pluginInterface);
         actions = new GameActions(targets, objects, condition);
-        automation = new FeteActionAutomation(actions, navmesh, objects, config);
+        automation = new FeteActionAutomation(actions, navmesh, objects);
         handinDialogs = new HandinDialogs(pluginInterface);
-        controller = new FeteController(clientState, objects, fates, navmesh, actions, automation,
-            config, () => pluginInterface.SavePluginConfig(config));
-        recorder = new CaptureRecorder(clientState, objects, fates, targets, controller);
+        controller = new FeteController(clientState, objects, fates, navmesh, actions, automation);
+        recorder = new CaptureRecorder(clientState, objects, fates, targets, controller, actions);
         window = new RunnerWindow(this);
         settingsWindow = new SettingsWindow(this);
         windows.AddWindow(window);
@@ -90,31 +99,14 @@ public sealed class Plugin : IDalamudPlugin
     private void OpenWindow() => window.IsOpen = true;
     private void OpenSettingsWindow() => settingsWindow.IsOpen = true;
 
-    private static Configuration LoadConfig(IDalamudPluginInterface pluginInterface, IPluginLog log)
+    private void SaveConfig()
     {
-        if (pluginInterface.GetPluginConfig() is Configuration current)
-            return current;
-
-        // AutoFete was previously named FeteRunner. Keep learned locations and target IDs.
-        var previousPath = Path.Combine(pluginInterface.ConfigFile.DirectoryName!, "FeteRunner.json");
-        if (File.Exists(previousPath))
+        try { config.Save(pluginInterface.ConfigFile.FullName); }
+        catch (Exception e)
         {
-            try
-            {
-                var previous = JsonConvert.DeserializeObject<Configuration>(File.ReadAllText(previousPath));
-                if (previous != null)
-                {
-                    pluginInterface.SavePluginConfig(previous);
-                    return previous;
-                }
-            }
-            catch (Exception e)
-            {
-                log.Warning(e, "Could not import FeteRunner settings");
-            }
+            log.Error(e, "Could not save AutoFete settings");
+            chat.PrintError("Could not save settings. See /xllog.", "AutoFete");
         }
-
-        return new Configuration();
     }
 
     private string ActiveStageLabel()
@@ -123,6 +115,11 @@ public sealed class Plugin : IDalamudPlugin
             f.State == FateState.Running && FeteCatalog.Find(f.FateId) != null);
         if (running != null)
             return FeteCatalog.Find(running.FateId)!.Value.Name;
+
+        var ending = fates.FirstOrDefault(f =>
+            f.State == FateState.Ending && FeteCatalog.Find(f.FateId)?.Stage == controller.CurrentStage);
+        if (ending != null)
+            return $"{FeteCatalog.Find(ending.FateId)!.Value.Name} (ending)";
 
         var preparing = fates.FirstOrDefault(f =>
             f.State == FateState.Preparing && FeteCatalog.Find(f.FateId) != null);
@@ -167,7 +164,7 @@ public sealed class Plugin : IDalamudPlugin
                 if (!config.DebugEnabled)
                 {
                     config.DebugEnabled = true;
-                    pluginInterface.SavePluginConfig(config);
+                    SaveConfig();
                 }
                 OpenWindow();
                 break;
@@ -175,36 +172,6 @@ public sealed class Plugin : IDalamudPlugin
                 OpenWindow();
                 break;
         }
-    }
-
-    private void MarkTarget(string role)
-    {
-        if (controller.CurrentStage is not { } stage)
-        {
-            chat.PrintError("Track or join an active Fête before marking a target.", "AutoFete");
-            return;
-        }
-
-        if (!FeteTargets.IsRole(stage, role))
-        {
-            chat.PrintError($"Unknown role for {stage}. Check the debug window's target list.", "AutoFete");
-            return;
-        }
-
-        var target = targets.Target;
-        if (target == null || target.BaseId == 0)
-        {
-            chat.PrintError("Select the Fête NPC or object first.", "AutoFete");
-            return;
-        }
-
-        if (FeteTargets.Add(config, stage, role, target))
-        {
-            pluginInterface.SavePluginConfig(config);
-            chat.Print($"Saved {stage}/{role}: {target.Name} (Base ID {target.BaseId}).", "AutoFete");
-        }
-        else
-            chat.Print($"{stage}/{role}: this target is already saved.", "AutoFete");
     }
 
     private void ToggleRecording()
@@ -296,16 +263,13 @@ public sealed class Plugin : IDalamudPlugin
             if (plugin.config.DebugEnabled)
             {
                 ImGui.Separator();
-                ImGui.Text("Observed Fête locations (world coordinates):");
+                ImGui.Text("Fête waypoints (world coordinates):");
                 foreach (var stageInfo in FeteCatalog.Stages)
                 {
-                    if (plugin.config.StageLocations != null &&
-                        plugin.config.StageLocations.TryGetValue(stageInfo.Stage.ToString(), out var location))
-                        ImGui.Text($"{stageInfo.Name}: observed {location.X:F1}, {location.Y:F1}, {location.Z:F1}");
-                    else if (FeteCatalog.ProvisionalWaypoint(stageInfo.Stage) is { } waypoint)
-                        ImGui.Text($"{stageInfo.Name}: provisional {waypoint.X:F1}, {waypoint.Y:F1}, {waypoint.Z:F1}");
+                    if (FeteCatalog.ProvisionalWaypoint(stageInfo.Stage) is { } waypoint)
+                        ImGui.Text($"{stageInfo.Name}: {waypoint.X:F1}, {waypoint.Y:F1}, {waypoint.Z:F1}");
                     else
-                        ImGui.Text($"{stageInfo.Name}: waiting to observe");
+                        ImGui.Text($"{stageInfo.Name}: no waypoint");
                 }
                 if (!plugin.controller.IsArmed && ImGui.Button("Track only"))
                     plugin.controller.Start(plugin.config.Mode);
@@ -314,17 +278,12 @@ public sealed class Plugin : IDalamudPlugin
                 ImGui.Text($"Recorded changes: {plugin.recorder.SampleCount}");
                 if (plugin.controller.CurrentStage is { } stage)
                 {
-                    ImGui.Text($"{stage} targets (select an object, then mark its role):");
+                    ImGui.Text($"{stage} target IDs:");
                     foreach (var role in FeteTargets.Roles[stage])
                     {
-                        var count = FeteTargets.Get(plugin.config, stage, role).Count;
-                        ImGui.Text($"{role}: {count} ID(s)");
                         var hints = string.Join(", ", FeteTargets.Hints(stage, role)
                             .Select(x => $"{x.Sheet} #{x.RowId}"));
-                        if (ImGui.IsItemHovered()) ImGui.SetTooltip(hints);
-                        ImGui.SameLine();
-                        if (ImGui.Button($"Mark##{role}"))
-                            plugin.MarkTarget(role);
+                        ImGui.TextUnformatted($"{role}: {hints}");
                     }
                 }
             }
@@ -343,7 +302,7 @@ public sealed class Plugin : IDalamudPlugin
                     "One cycle\0Continuous session\0"))
             {
                 plugin.config.Mode = mode == 0 ? RunMode.OneSequence : RunMode.RemainingCycle;
-                plugin.pluginInterface.SavePluginConfig(plugin.config);
+                plugin.SaveConfig();
             }
 
             ImGui.Separator();
@@ -354,7 +313,7 @@ public sealed class Plugin : IDalamudPlugin
                 plugin.config.DebugEnabled = debugEnabled;
                 if (!debugEnabled && plugin.recorder.IsRecording)
                     plugin.StopRecording();
-                plugin.pluginInterface.SavePluginConfig(plugin.config);
+                plugin.SaveConfig();
             }
         }
     }

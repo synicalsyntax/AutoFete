@@ -4,13 +4,14 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.Game.Fate;
+using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using System.Numerics;
 using System.Text.Json;
 
 namespace AutoFete;
 
 internal sealed unsafe class CaptureRecorder(IClientState clientState, IObjectTable objects, IFateTable fates,
-    ITargetManager targets, FeteController controller)
+    ITargetManager targets, FeteController controller, GameActions actions)
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { IncludeFields = true };
     private readonly List<string> samples = [];
@@ -71,8 +72,10 @@ internal sealed unsafe class CaptureRecorder(IClientState clientState, IObjectTa
             .ToArray();
 
         var fateManager = FateManager.Instance();
-        var activeFete = fates.FirstOrDefault(f => f.State == DalamudFateState.Running &&
-                                                  FeteCatalog.Find(f.FateId) != null);
+        var activeFete = fates.FirstOrDefault(f =>
+            (f.State == DalamudFateState.Running ||
+             f.State == DalamudFateState.Ending && controller.CurrentStage == FeteCatalog.Find(f.FateId)?.Stage) &&
+            FeteCatalog.Find(f.FateId) != null);
         var nativeFates = fates.Select(f =>
         {
             var native = fateManager == null ? null : fateManager->GetFateById(f.FateId);
@@ -82,6 +85,8 @@ internal sealed unsafe class CaptureRecorder(IClientState clientState, IObjectTa
                 ObjectiveNpc = native == null ? 0u : native->ObjectiveNpc,
                 EventItem = native == null ? 0u : native->EventItem,
                 TurnInEventItem = native == null ? 0u : native->TurnInEventItem,
+                GivenStatus = native == null ? 0 : native->GivenStatus,
+                StateFlags = native == null ? 0 : native->StateFlags,
             };
         }).ToArray();
 
@@ -96,13 +101,19 @@ internal sealed unsafe class CaptureRecorder(IClientState clientState, IObjectTa
             TargetName = targets.Target?.Name.ToString(),
             ActiveFeteId = activeFete?.FateId,
             ActiveFeteStage = activeFete is null ? null : FeteCatalog.Find(activeFete.FateId)?.Stage.ToString(),
+            JoinConfirmed = activeFete != null && actions.IsJoined(activeFete.FateId),
             ControllerArmed = controller.IsArmed,
             ControllerStage = controller.CurrentStage?.ToString(),
             ControllerStatus = controller.Status,
+            actions.LastJoinAttempt,
             CurrentFateId = fateManager == null ? 0 : fateManager->GetCurrentFateId(),
             FateJoined = fateManager != null && fateManager->FateJoined != 0,
             SyncedFateId = fateManager == null ? 0 : fateManager->SyncedFateId,
+            PlayerIsLevelSynced = PlayerState.Instance() != null && PlayerState.Instance()->IsLevelSynced,
             YakFleeceCount = GameActions.GetKeyItemCount(FeteCatalog.YakFleeceEventItemId),
+            LuckyToyCount = GameActions.GetKeyItemCount(FeteCatalog.LuckyToyEventItemId),
+            actions.CarryingObject,
+            actions.CarryingItem,
             PlayerEmoteId = ReadEmoteId(player),
             Statuses = player.StatusList.Where(s => s.StatusId != 0).Select(s => s.StatusId).ToArray(),
             Fates = fates.Select(f => new

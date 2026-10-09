@@ -1,23 +1,23 @@
-using Dalamud.Configuration;
 using System.Numerics;
+using System.Text.Json;
 
 namespace AutoFete;
 
-public sealed class Configuration : IPluginConfiguration
+public sealed class Configuration
 {
-    public int Version { get; set; } = 1;
     public RunMode Mode { get; set; } = RunMode.OneSequence;
     public bool DebugEnabled { get; set; }
-    public Dictionary<string, List<TargetBinding>> Targets { get; set; } = [];
-    public Dictionary<string, StageLocation> StageLocations { get; set; } = [];
-}
 
-public sealed class StageLocation
-{
-    public float X { get; set; }
-    public float Y { get; set; }
-    public float Z { get; set; }
-    public float Radius { get; set; }
+    public static Configuration Load(string path) => File.Exists(path)
+        ? JsonSerializer.Deserialize<Configuration>(File.ReadAllText(path)) ?? new Configuration()
+        : new Configuration();
+
+    public void Save(string path)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, JsonSerializer.Serialize(new { Mode, DebugEnabled },
+            new JsonSerializerOptions { WriteIndented = true }));
+    }
 }
 
 public enum RunMode
@@ -43,6 +43,7 @@ public static class FeteCatalog
     public const uint PerkyPeelerActionId = 24279;
     public const uint AetheromaticClipperActionId = 24280;
     public const uint YakFleeceEventItemId = 2003081;
+    public const uint LuckyToyEventItemId = 2003082;
 
     public static readonly (FeteStage Stage, string Name, int GoldCount)[] Stages =
     [
@@ -80,8 +81,8 @@ public static class FeteCatalog
         _ => FeteStage.Twist,
     };
 
-    // Player positions supplied as expected stage areas. Live FATE positions
-    // supersede these provisional waypoints when observed.
+    // Player supplied stage locations. FATE center/radius is too broad to use
+    // as a route waypoint; the controller uses these provisional positions.
     public static Vector3? ProvisionalWaypoint(FeteStage stage) => stage switch
     {
         // fete-capture-20261007-100000.jsonl

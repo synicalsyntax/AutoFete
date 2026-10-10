@@ -1,11 +1,9 @@
+using AutoFete.UI;
 using Dalamud.Game.Command;
 using Dalamud.Game.ClientState.Fates;
-using Dalamud.Interface;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
-using Dalamud.Bindings.ImGui;
-using System.Numerics;
 
 namespace AutoFete;
 
@@ -68,8 +66,10 @@ public sealed class Plugin : IDalamudPlugin
         handinDialogs = new HandinDialogs(pluginInterface);
         controller = new FeteController(clientState, objects, fates, navmesh, actions, automation, config);
         recorder = new CaptureRecorder(clientState, objects, fates, targets, controller, actions);
-        window = new RunnerWindow(this);
-        settingsWindow = new SettingsWindow(this);
+        window = new RunnerWindow(controller, recorder, config, ActiveStageLabel,
+            OpenSettingsWindow, ToggleRecording,
+            () => OnCommand("/autofete", controller.IsArmed ? "stop" : "start"));
+        settingsWindow = new SettingsWindow(config, recorder, SaveConfig, StopRecording);
         windows.AddWindow(window);
         windows.AddWindow(settingsWindow);
         commands.AddHandler("/autofete", new CommandInfo(OnCommand)
@@ -203,127 +203,6 @@ public sealed class Plugin : IDalamudPlugin
         {
             log.Error(e, "Could not save Fête capture");
             chat.PrintError("Could not save capture. See /xllog.", "AutoFete");
-        }
-    }
-
-    private sealed class RunnerWindow : Window
-    {
-        private static readonly Vector4 ActiveColor = new(0.36f, 0.87f, 0.48f, 1f);
-        private static readonly Vector4 InactiveColor = new(0.96f, 0.32f, 0.32f, 1f);
-        private readonly Plugin plugin;
-        private readonly TitleBarButton runButton;
-
-        public RunnerWindow(Plugin plugin) : base("AutoFete")
-        {
-            this.plugin = plugin;
-            TitleBarButtons.Add(new TitleBarButton
-            {
-                Icon = FontAwesomeIcon.Cog,
-                Click = _ => plugin.OpenSettingsWindow(),
-                ShowTooltip = () =>
-                {
-                    ImGui.BeginTooltip();
-                    ImGui.TextUnformatted("Settings");
-                    ImGui.EndTooltip();
-                },
-            });
-            runButton = new TitleBarButton
-            {
-                Icon = FontAwesomeIcon.Play,
-                Click = _ => plugin.OnCommand("/autofete", plugin.controller.IsArmed ? "stop" : "start"),
-                ShowTooltip = () =>
-                {
-                    ImGui.BeginTooltip();
-                    ImGui.TextUnformatted(plugin.controller.IsArmed ? "Disable" : "Enable");
-                    ImGui.EndTooltip();
-                },
-            };
-            TitleBarButtons.Add(runButton);
-        }
-
-        public override void PreDraw()
-        {
-            runButton.Icon = plugin.controller.IsArmed ? FontAwesomeIcon.Stop : FontAwesomeIcon.Play;
-            base.PreDraw();
-        }
-
-        public override void Draw()
-        {
-            if (plugin.controller.IsArmed)
-            {
-                ImGui.TextColored(ActiveColor, "Active");
-                ImGui.TextColoredWrapped(ActiveColor, $"Stage: {plugin.ActiveStageLabel()}");
-                ImGui.TextColoredWrapped(ActiveColor, plugin.controller.Status);
-            }
-            else
-            {
-                ImGui.TextColored(InactiveColor, "Inactive");
-            }
-
-            if (plugin.config.DebugEnabled)
-            {
-                ImGui.Separator();
-                ImGui.Text("Fête waypoints (world coordinates):");
-                foreach (var stageInfo in FeteCatalog.Stages)
-                {
-                    if (FeteCatalog.ProvisionalWaypoint(stageInfo.Stage) is { } waypoint)
-                        ImGui.Text($"{stageInfo.Name}: {waypoint.X:F1}, {waypoint.Y:F1}, {waypoint.Z:F1}");
-                    else
-                        ImGui.Text($"{stageInfo.Name}: no waypoint");
-                }
-                if (!plugin.controller.IsArmed && ImGui.Button("Track only"))
-                    plugin.controller.Start(plugin.config.Mode);
-                if (ImGui.Button(plugin.recorder.IsRecording ? "Save capture" : "Record capture"))
-                    plugin.ToggleRecording();
-                ImGui.Text($"Recorded changes: {plugin.recorder.SampleCount}");
-                if (plugin.controller.CurrentStage is { } stage)
-                {
-                    ImGui.Text($"{stage} target IDs:");
-                    foreach (var role in FeteTargets.Roles[stage])
-                    {
-                        var hints = string.Join(", ", FeteTargets.Hints(stage, role)
-                            .Select(x => $"{x.Sheet} #{x.RowId}"));
-                        ImGui.TextUnformatted($"{role}: {hints}");
-                    }
-                }
-            }
-        }
-    }
-
-    private sealed class SettingsWindow(Plugin plugin) : Window("AutoFete Settings")
-    {
-        public override void Draw()
-        {
-            var mode = plugin.config.Mode == RunMode.RemainingCycle ? 1 : 0;
-            ImGui.TextUnformatted("Completion mode");
-            ImGui.SameLine();
-            ImGui.SetNextItemWidth(-1);
-            if (ImGui.Combo("##CompletionMode", ref mode,
-                    "One cycle\0Continuous session\0"))
-            {
-                plugin.config.Mode = mode == 0 ? RunMode.OneSequence : RunMode.RemainingCycle;
-                plugin.SaveConfig();
-            }
-
-            ImGui.Separator();
-
-            var openPresents = plugin.config.OpenFetePresents;
-            if (ImGui.Checkbox("Automatically open fete presents in inventory", ref openPresents))
-            {
-                plugin.config.OpenFetePresents = openPresents;
-                plugin.SaveConfig();
-            }
-
-            ImGui.Separator();
-
-            var debugEnabled = plugin.config.DebugEnabled;
-            if (ImGui.Checkbox("Enable debug tools", ref debugEnabled))
-            {
-                plugin.config.DebugEnabled = debugEnabled;
-                if (!debugEnabled && plugin.recorder.IsRecording)
-                    plugin.StopRecording();
-                plugin.SaveConfig();
-            }
         }
     }
 }

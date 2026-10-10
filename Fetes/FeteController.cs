@@ -5,13 +5,15 @@ using System.Numerics;
 namespace AutoFete;
 
 internal sealed class FeteController(IClientState clientState, IObjectTable objects, IFateTable fates,
-    Navmesh navmesh, GameActions actions, FeteActionAutomation automation)
+    Navmesh navmesh, GameActions actions, FeteActionAutomation automation, Configuration config)
 {
+    private readonly FetePresentOpener presentOpener = new(actions);
     private ushort? currentFateId;
     private FeteStage? currentStage;
     private FeteStage? lastCompletedStage;
     private Vector3? routeDestination;
-    private bool sawPresents;
+    private bool sawFinalStage;
+    private bool processingCycleRewards;
     private bool autoJoin;
     private bool joinedCurrentStage;
 
@@ -20,9 +22,9 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
     public RunMode Mode { get; private set; }
     public FeteStage? CurrentStage => currentStage;
     public bool WantsHandinDialogs => autoJoin && currentFateId is { } id &&
-                                       (currentStage is FeteStage.SofterStuff or FeteStage.ShearYak or
-                                           FeteStage.ToyHunter or FeteStage.Presents) &&
-                                      (currentStage == FeteStage.SofterStuff || actions.IsJoined(id));
+                                       FeteCatalog.Find(id) is { } stage &&
+                                       stage.UsesHandinDialogs &&
+                                       (!stage.WaitForJoinConfirmation || actions.IsJoined(id));
 
     public bool Start(RunMode mode, bool join = false)
     {
@@ -52,7 +54,9 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
         currentStage = null;
         lastCompletedStage = null;
         routeDestination = null;
-        sawPresents = false;
+        sawFinalStage = false;
+        processingCycleRewards = false;
+        presentOpener.Reset();
         joinedCurrentStage = false;
         automation.Reset();
         Status = join ? "Waiting to join a Fête." : "Tracking Fêtes.";
@@ -68,6 +72,9 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
         lastCompletedStage = null;
         routeDestination = null;
         joinedCurrentStage = false;
+        sawFinalStage = false;
+        processingCycleRewards = false;
+        presentOpener.Reset();
         automation.Reset();
         navmesh.Stop();
         Status = reason;
@@ -110,12 +117,6 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
 
         if (active.Fate == null)
         {
-            if (sawPresents && Mode == RunMode.OneSequence)
-            {
-                Stop("Sequence ended.");
-                return;
-            }
-
             if (currentStage != null)
             {
                 lastCompletedStage = currentStage;
@@ -125,6 +126,41 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
                 automation.Reset();
                 navmesh.Stop();
                 routeDestination = null;
+            }
+
+            if (sawFinalStage)
+            {
+                sawFinalStage = false;
+                processingCycleRewards = true;
+                if (autoJoin && config.OpenFetePresents)
+                    presentOpener.Start(waitForRewards: true);
+            }
+
+            if (!config.OpenFetePresents)
+                presentOpener.Reset();
+            else if (autoJoin && !presentOpener.IsActive && !processingCycleRewards &&
+                     presentOpener.ShouldStart(GameActions.GetInventoryItemCount(FetePresentOpener.PresentItemId)))
+                presentOpener.Start();
+
+            if (presentOpener.IsActive && !presentOpener.Tick())
+            {
+                if (navmesh.IsMoving()) navmesh.Stop();
+                routeDestination = null;
+                Status = presentOpener.Status;
+                return;
+            }
+
+            if (processingCycleRewards)
+            {
+                processingCycleRewards = false;
+                if (Mode == RunMode.OneSequence)
+                {
+                    var reason = presentOpener.Status.Length > 0
+                        ? $"Sequence ended. {presentOpener.Status}"
+                        : "Sequence ended.";
+                    Stop(reason);
+                    return;
+                }
             }
 
             if (!autoJoin)
@@ -157,6 +193,9 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
             return;
         }
 
+        if (presentOpener.IsActive)
+            presentOpener.Reset();
+
         if (active.Fate.FateId != currentFateId)
         {
             if (navmesh.IsMoving()) navmesh.Stop();
@@ -166,8 +205,8 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
             lastCompletedStage = null;
             joinedCurrentStage = false;
             automation.Reset();
-            if (currentStage == FeteStage.Presents)
-                sawPresents = true;
+            if (currentStage == FeteCatalog.Stages[^1].Stage)
+                sawFinalStage = true;
         }
 
         if (!autoJoin)
@@ -185,13 +224,13 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
                 routeDestination = null;
                 joinedCurrentStage = true;
             }
-            Status = automation.Tick(currentStage!.Value, active.Fate.FateId, active.Fate.HandInCount);
+            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount);
             return;
         }
 
-        if (currentStage == FeteStage.SofterStuff && joinedCurrentStage)
+        if (!active.Stage!.Value.WaitForJoinConfirmation && joinedCurrentStage)
         {
-            Status = automation.Tick(currentStage.Value, active.Fate.FateId, active.Fate.HandInCount);
+            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount);
             return;
         }
 
@@ -211,12 +250,12 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
 
         if (navmesh.IsMoving()) navmesh.Stop();
         actions.TryJoin(active.Fate.FateId, playerPosition, active.Fate.Position, active.Fate.Radius);
-        if (currentStage == FeteStage.SofterStuff)
+        if (!active.Stage!.Value.WaitForJoinConfirmation)
         {
             // Materials and toy interactions can begin without waiting for the
             // FATE participant status to appear after the join request.
             joinedCurrentStage = true;
-            Status = automation.Tick(currentStage.Value, active.Fate.FateId, active.Fate.HandInCount);
+            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount);
             return;
         }
         Status = $"Joining the Fête: {actions.LastJoinAttempt} Waiting for game confirmation.";

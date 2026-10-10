@@ -6,6 +6,7 @@ using FFXIVClientStructs.FFXIV.Client.Game.Fate;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using System.Numerics;
 
 namespace AutoFete;
@@ -31,6 +32,12 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
     {
         if (targets.Target?.GameObjectId != target.GameObjectId)
             targets.Target = target;
+    }
+
+    public void ClearTarget()
+    {
+        if (targets.Target != null)
+            targets.Target = null;
     }
 
     public bool IsJoined(ushort fateId)
@@ -107,8 +114,8 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
         return result > 0 && result != 7;
     }
 
-    public IGameObject? FindTarget(FeteStage stage, string role) => objects
-        .Where(x => x.IsTargetable && FeteTargets.Matches(stage, role, x))
+    public IGameObject? FindTarget(FeteDefinition definition, string role) => objects
+        .Where(x => x.IsTargetable && FeteTargets.Matches(definition, role, x))
         .OrderBy(x => Vector3.Distance(objects.LocalPlayer?.Position ?? Vector3.Zero, x.Position))
         .FirstOrDefault();
 
@@ -124,7 +131,56 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
             : inventory->GetItemCountInContainer(itemId, InventoryType.KeyItems);
     }
 
-    public bool TryUseFeteAction(ushort fateId, FeteAction action, out string result)
+    public static int GetInventoryItemCount(uint itemId)
+    {
+        var inventory = InventoryManager.Instance();
+        return inventory == null ? -1 : inventory->GetInventoryItemCount(itemId);
+    }
+
+    public static int GetFreeInventorySlots()
+    {
+        var inventory = InventoryManager.Instance();
+        if (inventory == null)
+            return 0;
+
+        var free = 0;
+        for (var type = InventoryType.Inventory1; type <= InventoryType.Inventory4; type++)
+        {
+            var container = inventory->GetInventoryContainer(type);
+            if (container == null)
+                continue;
+            for (var slot = 0; slot < container->Size; slot++)
+            {
+                var item = container->GetInventorySlot(slot);
+                if (item == null || item->ItemId == 0)
+                    free++;
+            }
+        }
+        return free;
+    }
+
+    public bool CanUseInventoryItem =>
+        !condition[ConditionFlag.Mounted] &&
+        !condition[ConditionFlag.InCombat] &&
+        !condition[ConditionFlag.Casting] &&
+        !condition[ConditionFlag.Occupied] &&
+        !condition[ConditionFlag.Occupied30] &&
+        !condition[ConditionFlag.Occupied33] &&
+        !condition[ConditionFlag.Occupied38] &&
+        !condition[ConditionFlag.Occupied39] &&
+        !condition[ConditionFlag.OccupiedInEvent] &&
+        !condition[ConditionFlag.OccupiedInQuestEvent] &&
+        !condition[ConditionFlag.OccupiedInCutSceneEvent] &&
+        !condition[ConditionFlag.BetweenAreas] &&
+        !condition[ConditionFlag.BetweenAreas51];
+
+    public static bool TryUseInventoryItem(uint itemId)
+    {
+        var agent = AgentInventoryContext.Instance();
+        return agent != null && agent->UseItem(itemId) == 0;
+    }
+
+    public bool TryUseFeteAction(ushort fateId, FeteAction action, IGameObject target, out string result)
     {
         result = "Action unavailable.";
         if (FeteCatalog.Find(fateId)?.Stage != action.Stage || !IsJoined(fateId))
@@ -147,8 +203,9 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
             return false;
         }
 
-        var target = FindTarget(action.Stage, action.TargetRole);
-        if (target is not ICharacter || !target.IsTargetable || target.Address == 0)
+        if (target is not ICharacter || !target.IsTargetable || target.Address == 0 ||
+            FeteCatalog.Find(fateId) is not { } definition ||
+            !FeteTargets.Matches(definition, action.TargetRole, target))
         {
             result = $"No targetable NPC mapped as {action.TargetRole} is nearby.";
             return false;

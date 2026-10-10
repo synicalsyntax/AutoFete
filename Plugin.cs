@@ -66,7 +66,7 @@ public sealed class Plugin : IDalamudPlugin
         actions = new GameActions(targets, objects, condition);
         automation = new FeteActionAutomation(actions, navmesh, objects);
         handinDialogs = new HandinDialogs(pluginInterface);
-        controller = new FeteController(clientState, objects, fates, navmesh, actions, automation);
+        controller = new FeteController(clientState, objects, fates, navmesh, actions, automation, config);
         recorder = new CaptureRecorder(clientState, objects, fates, targets, controller, actions);
         window = new RunnerWindow(this);
         settingsWindow = new SettingsWindow(this);
@@ -302,6 +302,15 @@ public sealed class Plugin : IDalamudPlugin
                     "One cycle\0Continuous session\0"))
             {
                 plugin.config.Mode = mode == 0 ? RunMode.OneSequence : RunMode.RemainingCycle;
+                plugin.SaveConfig();
+            }
+
+            ImGui.Separator();
+
+            var openPresents = plugin.config.OpenFetePresents;
+            if (ImGui.Checkbox("Automatically open fete presents in inventory", ref openPresents))
+            {
+                plugin.config.OpenFetePresents = openPresents;
                 plugin.SaveConfig();
             }
 

@@ -13,7 +13,7 @@ internal abstract class FeteStageHandler(FeteDefinition definition, GameActions 
     protected readonly IObjectTable objects = objects;
 
     public abstract void Reset();
-    public abstract string Tick(byte handInCount);
+    public abstract string? Tick(byte handInCount);
 
     protected IGameObject? FindTarget(string role) => actions.FindTarget(definition, role);
 

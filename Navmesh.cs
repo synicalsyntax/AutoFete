@@ -36,6 +36,6 @@ internal sealed class Navmesh(IDalamudPluginInterface pluginInterface)
     public void Stop()
     {
         try { stop.InvokeAction(); }
-        catch { /* vnavmesh may already have unloaded. */ }
+        catch { }
     }
 }

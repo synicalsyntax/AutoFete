@@ -105,8 +105,6 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
             return false;
 
         nextInteractUtc = DateTime.UtcNow.AddMilliseconds(750);
-        // Match Questionable: select the object, then ask the game's target
-        // system to interact. Success here only means interaction was sent.
         targets.Target = null;
         targets.Target = target;
         long result = (long)targetSystem->InteractWithObject((GameObject*)target.Address,

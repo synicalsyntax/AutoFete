@@ -3,8 +3,6 @@ using Dalamud.Plugin.Ipc;
 
 namespace AutoFete;
 
-// TextAdvance's external-control contract, as used by Questionable and CBT.
-// Only Request fill/hand-in and the accompanying Talk skip are enabled.
 internal sealed class HandinDialogs : IDisposable
 {
     private const string Owner = "AutoFete";
@@ -43,7 +41,7 @@ internal sealed class HandinDialogs : IDisposable
                     EnableRequestHandin = true,
                 });
         }
-        catch { /* TextAdvance is optional and can unload during a Fête. */ }
+        catch { }
     }
 
     public void Disable()
@@ -51,13 +49,12 @@ internal sealed class HandinDialogs : IDisposable
         if (!enabled)
             return;
         try { disable.InvokeFunc(Owner); }
-        catch { /* TextAdvance may already have unloaded. */ }
+        catch { }
         enabled = false;
     }
 
     public void Dispose() => Disable();
 
-    // Keep field names and types identical to TextAdvance's external IPC data.
     public sealed class ExternalTerritoryConfig
     {
         public bool? EnableQuestAccept;

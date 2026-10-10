@@ -1,5 +1,4 @@
 using Dalamud.Plugin.Services;
-using System.Numerics;
 
 namespace AutoFete;
 
@@ -11,7 +10,6 @@ internal static class FeteCatalog
 {
     public const uint FirmamentTerritoryId = 886;
 
-    // This is the single registration point, in cycle order.
     public static readonly FeteRegistration[] Registrations =
     [
         new(TwistFete.Definition,
@@ -49,6 +47,4 @@ internal static class FeteCatalog
         var index = Array.FindIndex(Stages, definition => definition.Stage == stage);
         return Stages[(index + 1) % Stages.Length].Stage;
     }
-
-    public static Vector3? ProvisionalWaypoint(FeteStage stage) => Find(stage)?.Waypoint;
 }

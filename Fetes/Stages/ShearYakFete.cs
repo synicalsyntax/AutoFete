@@ -43,9 +43,9 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
         previousFleeceCount = -1;
     }
 
-    public override string Tick(byte handInCount) => TickShearYak(handInCount);
+    public override string? Tick(byte handInCount) => TickShearYak(handInCount);
 
-    private string TickShearYak(byte handInCount)
+    private string? TickShearYak(byte handInCount)
     {
         var fleeceCount = GameActions.GetKeyItemCount(YakFleeceEventItemId);
         if (fleeceCount < 0)
@@ -112,7 +112,7 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
         if (yakInRangeSinceUtc == DateTime.MinValue)
             yakInRangeSinceUtc = now;
         if (now - yakInRangeSinceUtc < TimeSpan.FromMilliseconds(500))
-            return "Waiting half a second after reaching the Wooly Yak.";
+            return null;
 
         if (actions.TryUseFeteAction(FateId, ClipperAction, yak, out var actionResult))
         {

@@ -7,6 +7,7 @@ namespace AutoFete;
 internal sealed class FeteController(IClientState clientState, IObjectTable objects, IFateTable fates,
     Navmesh navmesh, GameActions actions, FeteActionAutomation automation, Configuration config)
 {
+    private const float StageApproachRadius = 6f;
     private readonly FetePresentOpener presentOpener = new(actions);
     private ushort? currentFateId;
     private FeteStage? currentStage;
@@ -172,21 +173,16 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
             var preparing = visible.FirstOrDefault(x => x.Fate.State == FateState.Preparing);
             if (preparing.Fate != null)
             {
-                if (TryGetStageApproach(preparing.Stage!.Value.Stage, out var approach))
-                    MoveToward(preparing.Stage!.Value.Name, approach.Position, approach.Radius,
-                        "preparing Fête");
+                var stage = preparing.Stage!.Value;
+                MoveToward(stage.Name, stage.Waypoint, StageApproachRadius, "preparing Fête");
                 return;
             }
 
             if (lastCompletedStage is { } previous)
             {
-                var nextStage = FeteCatalog.Next(previous);
-                var name = FeteCatalog.Stages.First(x => x.Stage == nextStage).Name;
-                if (TryGetStageApproach(nextStage, out var next))
-                {
-                    MoveToward(name, next.Position, next.Radius, "Fête location");
-                    return;
-                }
+                var next = FeteCatalog.Find(FeteCatalog.Next(previous))!.Value;
+                MoveToward(next.Name, next.Waypoint, StageApproachRadius, "Fête location");
+                return;
             }
 
             Status = "Waiting for the next Fête location.";
@@ -224,26 +220,22 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
                 routeDestination = null;
                 joinedCurrentStage = true;
             }
-            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount);
+            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount) ?? Status;
             return;
         }
 
         if (!active.Stage!.Value.WaitForJoinConfirmation && joinedCurrentStage)
         {
-            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount);
+            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount) ?? Status;
             return;
         }
 
         joinedCurrentStage = false;
 
-        if (!TryGetStageApproach(currentStage!.Value, out var joinApproach))
+        var joinWaypoint = active.Stage!.Value.Waypoint;
+        if (Vector3.Distance(playerPosition, joinWaypoint) > Math.Max(2f, StageApproachRadius - 3f))
         {
-            Status = "No waypoint is configured for this Fête stage.";
-            return;
-        }
-        if (Vector3.Distance(playerPosition, joinApproach.Position) > Math.Max(2f, joinApproach.Radius - 3f))
-        {
-            MoveToward(active.Stage!.Value.Name, joinApproach.Position, joinApproach.Radius,
+            MoveToward(active.Stage!.Value.Name, joinWaypoint, StageApproachRadius,
                 "join location");
             return;
         }
@@ -255,22 +247,10 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
             // Materials and toy interactions can begin without waiting for the
             // FATE participant status to appear after the join request.
             joinedCurrentStage = true;
-            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount);
+            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount) ?? Status;
             return;
         }
         Status = $"Joining the Fête: {actions.LastJoinAttempt} Waiting for game confirmation.";
-    }
-
-    private static bool TryGetStageApproach(FeteStage stage, out (Vector3 Position, float Radius) approach)
-    {
-        if (FeteCatalog.ProvisionalWaypoint(stage) is { } waypoint)
-        {
-            approach = (waypoint, 6f);
-            return true;
-        }
-
-        approach = default;
-        return false;
     }
 
     private void MoveToward(string name, Vector3 position, float radius, string source)

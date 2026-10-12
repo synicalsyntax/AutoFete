@@ -19,6 +19,12 @@ internal sealed class FeteActionAutomation(GameActions actions, Navmesh navmesh,
         FeteCatalog.Find(fateId) is { } definition &&
         handlers.TryGetValue(definition.Stage, out var handler) && handler.IsComplete;
 
+    public int? FullCreditPoints(ushort fateId) =>
+        FeteCatalog.Find(fateId) is { } definition &&
+        handlers.TryGetValue(definition.Stage, out var handler)
+            ? handler.FullCreditPoints
+            : null;
+
     public string? Tick(ushort fateId, byte handInCount, bool continueAfterFullCredit)
     {
         var definition = FeteCatalog.Find(fateId);

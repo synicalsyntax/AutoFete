@@ -16,10 +16,12 @@ internal abstract class FeteStageHandler(FeteDefinition definition, GameActions 
     private DateTime missingTargetSinceUtc;
 
     public bool IsComplete { get; private set; }
+    public int? FullCreditPoints { get; private set; }
 
     public void Reset()
     {
         IsComplete = false;
+        FullCreditPoints = null;
         ClearMissingTarget();
         nextInteractionUtc.Clear();
         ResetStage();
@@ -30,6 +32,8 @@ internal abstract class FeteStageHandler(FeteDefinition definition, GameActions 
 
     protected bool ShouldComplete(int earned, bool continueAfterFullCredit)
     {
+        if (earned >= definition.MinPointCount)
+            FullCreditPoints ??= earned;
         if (continueAfterFullCredit)
             IsComplete = false;
         return !continueAfterFullCredit && earned >= definition.MinPointCount;
@@ -39,7 +43,7 @@ internal abstract class FeteStageHandler(FeteDefinition definition, GameActions 
     {
         IsComplete = true;
         if (navmesh.IsMoving()) navmesh.Stop();
-        return StatusText.Format("Result_StageAutomationComplete", earned);
+        return StatusText.Format("Result_StageAutomationComplete", definition.Name, earned);
     }
 
     protected IGameObject? FindTarget(string role)

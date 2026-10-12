@@ -68,6 +68,7 @@ public sealed class Plugin : IDalamudPlugin
         controller = new FeteController(clientState, objects, fates, navmesh, actions,
             automation, handinDialogs, config);
         controller.StageCompleted += OnStageCompleted;
+        controller.AutomationFailed += OnAutomationFailed;
         recorder = new CaptureRecorder(clientState, objects, fates, targets, controller, actions);
         window = new RunnerWindow(controller, recorder, config, ActiveStageLabel,
             OpenSettingsWindow, ToggleRecording,
@@ -93,6 +94,7 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenConfigUi -= OpenSettingsWindow;
         commands.RemoveHandler("/autofete");
         controller.StageCompleted -= OnStageCompleted;
+        controller.AutomationFailed -= OnAutomationFailed;
         controller.Stop(StatusText.Get("Stop_PluginUnloaded"));
         handinDialogs.Dispose();
         if (recorder.IsRecording)
@@ -149,13 +151,14 @@ public sealed class Plugin : IDalamudPlugin
         }
         catch (Exception e)
         {
-            controller.Stop(StatusText.Get("Stop_UnexpectedError"));
+            controller.StopWithError(StatusText.Get("Stop_UnexpectedError"));
             handinDialogs.Disable();
             log.Error(e, "AutoFete update failed");
         }
     }
 
     private void OnStageCompleted(string message) => chat.Print(message, "AutoFete");
+    private void OnAutomationFailed(string message) => chat.PrintError(message, "AutoFete");
 
     private void OnCommand(string _, string arguments)
     {

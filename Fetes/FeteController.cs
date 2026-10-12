@@ -20,6 +20,7 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
     private bool joinedCurrentStage;
 
     public event Action<string>? StageCompleted;
+    public event Action<string>? AutomationFailed;
 
     public bool IsArmed { get; private set; }
     public string Status { get; private set; } = StatusText.Get("Stop_Default");
@@ -77,6 +78,14 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
         Status = reason ?? StatusText.Get("Stop_Default");
     }
 
+    public void StopWithError(string reason)
+    {
+        var wasArmed = IsArmed;
+        Stop(reason);
+        if (wasArmed)
+            AutomationFailed?.Invoke(reason);
+    }
+
     public void Tick()
     {
         if (!IsArmed)
@@ -84,26 +93,26 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
 
         if (!clientState.IsLoggedIn || clientState.TerritoryType != FeteCatalog.FirmamentTerritoryId)
         {
-            Stop(StatusText.Get("Stop_LeftFirmamentOrLoggedOut"));
+            StopWithError(StatusText.Get("Stop_LeftFirmamentOrLoggedOut"));
             return;
         }
 
         if (!navmesh.IsReady())
         {
-            Stop(StatusText.Get("Stop_NavmeshUnavailable"));
+            StopWithError(StatusText.Get("Stop_NavmeshUnavailable"));
             return;
         }
 
         if (!handinDialogs.IsAvailable)
         {
-            Stop(StatusText.Get("Stop_TextAdvanceUnavailable"));
+            StopWithError(StatusText.Get("Stop_TextAdvanceUnavailable"));
             return;
         }
 
         var job = objects.LocalPlayer?.ClassJob.RowId ?? 0;
         if (job is < 8 or > 18)
         {
-            Stop(StatusText.Get("Stop_InvalidJob"));
+            StopWithError(StatusText.Get("Stop_InvalidJob"));
             return;
         }
 
@@ -269,10 +278,11 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
 
     private void RunStage(ushort fateId, byte handInCount)
     {
-        var wasComplete = automation.IsComplete(fateId);
+        var hadFullCredit = automation.FullCreditPoints(fateId) != null;
         Status = automation.Tick(fateId, handInCount, config.ContinueFeteActionsAfterFullCredit) ?? Status;
-        if (!wasComplete && automation.IsComplete(fateId))
-            StageCompleted?.Invoke(Status);
+        if (!hadFullCredit && automation.FullCreditPoints(fateId) is { } points &&
+            FeteCatalog.Find(fateId) is { } stage)
+            StageCompleted?.Invoke(StatusText.Format("Result_StageAutomationComplete", stage.Name, points));
     }
 
     private void StopRoute()

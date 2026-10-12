@@ -14,15 +14,15 @@ internal sealed class PresentsFete(GameActions actions, Navmesh navmesh, IObject
     public static readonly IReadOnlyDictionary<string, TargetHint[]> Targets =
         new Dictionary<string, TargetHint[]>
         {
-            ["child-present"] = [new("EObjName", 2011676, "present for children")],
-            ["merchant-present"] = [new("EObjName", 2011675, "present for merchants")],
-            ["artisan-present"] = [new("EObjName", 2011529, "present for artisans")],
-            ["firmament-boy"] = [new("BNpcName", 10092, "Firmament boy")],
-            ["firmament-girl"] = [new("BNpcName", 10093, "Firmament girl")],
-            ["foreign-merchant"] = [new("BNpcName", 10090, "foreign merchant")],
-            ["ishgardian-merchant"] = [new("BNpcName", 10089, "Ishgardian merchant")],
-            ["skysteel-engineer"] = [new("BNpcName", 10086, "Skysteel engineer")],
-            ["dzemael-stonemason"] = [new("BNpcName", 10087, "House Dzemael stonemason")],
+            ["child-present"] = [TargetHint.Interactable(2011676, "present for children")],
+            ["merchant-present"] = [TargetHint.Interactable(2011675, "present for merchants")],
+            ["artisan-present"] = [TargetHint.Interactable(2011529, "present for artisans")],
+            ["firmament-boy"] = [TargetHint.Npc(10092, "Firmament boy")],
+            ["firmament-girl"] = [TargetHint.Npc(10093, "Firmament girl")],
+            ["foreign-merchant"] = [TargetHint.Npc(10090, "foreign merchant")],
+            ["ishgardian-merchant"] = [TargetHint.Npc(10089, "Ishgardian merchant")],
+            ["skysteel-engineer"] = [TargetHint.Npc(10086, "Skysteel engineer")],
+            ["dzemael-stonemason"] = [TargetHint.Npc(10087, "House Dzemael stonemason")],
         };
     public static readonly FeteDefinition Definition = new(
         FeteStage.Presents, FateId, Name, GoldCount, Waypoint, Targets,

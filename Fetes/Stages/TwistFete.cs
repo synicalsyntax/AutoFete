@@ -17,9 +17,9 @@ internal sealed class TwistFete(GameActions actions, Navmesh navmesh, IObjectTab
     public static readonly IReadOnlyDictionary<string, TargetHint[]> Targets =
         new Dictionary<string, TargetHint[]>
         {
-            ["mighty-moogle"] = [new("BNpcName", 10080, "Mighty Moogle")],
-            ["chirpy-chocobo"] = [new("BNpcName", 10081, "Chirpy Chocobo")],
-            ["perky-piggy"] = [new("BNpcName", 10082, "Perky Piggy")],
+            ["mighty-moogle"] = [TargetHint.MightyMoogle],
+            ["chirpy-chocobo"] = [TargetHint.ChirpyChocobo],
+            ["perky-piggy"] = [TargetHint.PerkyPiggy],
         };
     public static readonly FeteAction[] Actions =
     [

@@ -17,9 +17,9 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
     public static readonly IReadOnlyDictionary<string, TargetHint[]> Targets =
         new Dictionary<string, TargetHint[]>
         {
-            ["wooly-yak"] = [new("BNpcName", 3479, "wooly yak"), new("BNpcName", 11214, "wooly yak")],
-            ["yak-fleece"] = [new("EObjName", 2011602, "yak fleece")],
-            ["chirpy-chocobo"] = [new("BNpcName", 10081, "Chirpy Chocobo")],
+            ["wooly-yak"] = [TargetHint.Npc(11214, "wooly yak")],
+            ["yak-fleece"] = [TargetHint.Interactable(2011602, "yak fleece")],
+            ["chirpy-chocobo"] = [TargetHint.ChirpyChocobo],
         };
     private static readonly FeteAction ClipperAction =
         new(AetheromaticClipperActionId, "Aetheromatic Clipper", FeteStage.ShearYak, "wooly-yak");

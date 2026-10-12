@@ -15,8 +15,8 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
     public static readonly IReadOnlyDictionary<string, TargetHint[]> Targets =
         new Dictionary<string, TargetHint[]>
         {
-            ["present-box"] = [new("EObjName", 2011528, "present box")],
-            ["perky-piggy"] = [new("BNpcName", 10082, "Perky Piggy")],
+            ["present-box"] = [TargetHint.Interactable(2011528, "present box")],
+            ["perky-piggy"] = [TargetHint.PerkyPiggy],
         };
     public static readonly FeteDefinition Definition = new(
         FeteStage.ToyHunter, FateId, Name, GoldCount, Waypoint, Targets,

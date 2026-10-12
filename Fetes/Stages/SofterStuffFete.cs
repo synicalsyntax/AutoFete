@@ -14,9 +14,9 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
     public static readonly IReadOnlyDictionary<string, TargetHint[]> Targets =
         new Dictionary<string, TargetHint[]>
         {
-            ["materials"] = [new("EObjName", 2011601, "stuffed toy materials")],
-            ["stuffed-toy"] = [new("EObjName", 2011527, "stuffed toy")],
-            ["wain"] = [new("EObjName", 2011525, "wain")],
+            ["materials"] = [TargetHint.Interactable(2011601, "stuffed toy materials")],
+            ["stuffed-toy"] = [TargetHint.Interactable(2011527, "stuffed toy")],
+            ["wain"] = [TargetHint.Interactable(2011525, "wain")],
         };
     public static readonly FeteDefinition Definition = new(
         FeteStage.SofterStuff, FateId, Name, GoldCount, Waypoint, Targets,

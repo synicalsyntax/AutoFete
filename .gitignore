@@ -1,6 +1,7 @@
 # .NET build outputs
 bin/
 obj/
+__pycache__/
 
 # Local IDE and user settings
 .vs/

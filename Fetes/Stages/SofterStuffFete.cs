@@ -22,9 +22,6 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
         FeteStage.SofterStuff, FateId, Name, GoldCount, Waypoint, Targets,
         WaitForJoinConfirmation: false, UsesHandinDialogs: true);
 
-    private DateTime nextMaterialsInteractUtc;
-    private DateTime nextToyInteractUtc;
-    private DateTime nextWainInteractUtc;
     private bool wasCarryingToy;
     private int completedToyHandins;
     private bool toyDeliveryPending;
@@ -32,11 +29,8 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
     private DateTime waitingForPickupUntilUtc;
     private static readonly Vector3 SofterStuffWainArea = new(50.13658f, -18.50903f, 19.80073f);
 
-    public override void Reset()
+    protected override void ResetStage()
     {
-        nextMaterialsInteractUtc = DateTime.MinValue;
-        nextToyInteractUtc = DateTime.MinValue;
-        nextWainInteractUtc = DateTime.MinValue;
         wasCarryingToy = false;
         completedToyHandins = 0;
         toyDeliveryPending = false;
@@ -44,9 +38,7 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
         waitingForPickupUntilUtc = DateTime.MinValue;
     }
 
-    public override string Tick(byte handInCount) => TickSofterStuff();
-
-    private string TickSofterStuff()
+    public override string Tick(byte handInCount)
     {
         var carryingToy = actions.IsCarryingToy;
         if (wasCarryingToy && !carryingToy && toyDeliveryPending)
@@ -56,7 +48,7 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
         wasCarryingToy = carryingToy;
 
         if (completedToyHandins >= GoldCount)
-            return "Three toy deliveries observed; waiting for the Fête to finish.";
+            return string.Empty;
 
         if (carryingToy)
         {
@@ -68,18 +60,14 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
                     .OrderBy(x => Vector3.DistanceSquared(objects.LocalPlayer!.Position, x.Position))
                     .FirstOrDefault();
                 if (MoveWithin(visibleWain?.Position ?? SofterStuffWainArea, 8f))
-                    return "Carrying a stuffed toy toward the wain.";
-                return "Carrying a stuffed toy; waiting for the wain to become targetable.";
+                    return StatusText.Format("Progress_DeliveringTo", visibleWain?.Name ?? StatusText.Get("Target_Wain"));
+                return MissingTarget("wain", StatusText.Get("Target_Wain"));
             }
             if (MoveWithin(wain.Position, 3f))
-                return "Carrying a stuffed toy to a wain.";
-            if (DateTime.UtcNow >= nextWainInteractUtc &&
-                actions.TryInteract(wain, objects.LocalPlayer!.Position))
-            {
-                nextWainInteractUtc = DateTime.UtcNow.AddSeconds(2);
+                return StatusText.Format("Progress_DeliveringTo", wain.Name);
+            if (TryInteract("wain", wain))
                 toyDeliveryPending = true;
-            }
-            return $"Delivering a stuffed toy to a wain ({completedToyHandins}/3 observed).";
+            return StatusText.Format("Progress_DeliveringTo", wain.Name);
         }
 
         // A completed toy becomes targetable after its material pile is used.
@@ -89,32 +77,24 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
         {
             waitingForToyUntilUtc = DateTime.MinValue;
             if (MoveWithin(toy.Position, 3f))
-                return "Moving to a finished stuffed toy.";
-            if (DateTime.UtcNow >= nextToyInteractUtc &&
-                actions.TryInteract(toy, objects.LocalPlayer!.Position))
-            {
-                nextToyInteractUtc = DateTime.UtcNow.AddSeconds(2);
+                return string.Empty;
+            if (TryInteract("stuffed-toy", toy))
                 waitingForPickupUntilUtc = DateTime.UtcNow.AddSeconds(8);
-            }
-            return "Picking up the finished stuffed toy.";
+            return StatusText.Format("Progress_PickingUp", toy.Name);
         }
 
         if (DateTime.UtcNow < waitingForPickupUntilUtc)
-            return "Waiting for the stuffed toy pickup to finish.";
+            return string.Empty;
         if (DateTime.UtcNow < waitingForToyUntilUtc)
-            return "Making a stuffed toy; waiting for the finished toy.";
+            return string.Empty;
 
         var materials = FindTarget("materials");
         if (materials == null)
-            return "Looking for targetable stuffed toy materials.";
+            return MissingTarget("materials", StatusText.Get("Target_StuffedToyMaterials"));
         if (MoveWithin(materials.Position, 3f))
-            return "Moving to stuffed toy materials.";
-        if (DateTime.UtcNow >= nextMaterialsInteractUtc &&
-            actions.TryInteract(materials, objects.LocalPlayer!.Position))
-        {
-            nextMaterialsInteractUtc = DateTime.UtcNow.AddSeconds(2);
+            return string.Empty;
+        if (TryInteract("materials", materials))
             waitingForToyUntilUtc = DateTime.UtcNow.AddSeconds(20);
-        }
-        return "Making a stuffed toy; waiting for the finished toy.";
+        return string.Empty;
     }
 }

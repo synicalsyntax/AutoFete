@@ -33,19 +33,17 @@ internal sealed class TwistFete(GameActions actions, Navmesh navmesh, IObjectTab
 
     private readonly HashSet<string> handledTwistTargets = [];
 
-    public override void Reset()
+    protected override void ResetStage()
     {
         handledTwistTargets.Clear();
     }
 
-    public override string Tick(byte handInCount) => TickTwist(handInCount);
-
-    private string TickTwist(byte handInCount)
+    public override string Tick(byte handInCount)
     {
         if (handInCount >= GoldCount)
         {
             if (navmesh.IsMoving()) navmesh.Stop();
-            return "Six mascot actions complete; waiting for the Fête to finish.";
+            return string.Empty;
         }
 
         // During each turn, the active mascot becomes targetable. Its EmoteId
@@ -64,13 +62,13 @@ internal sealed class TwistFete(GameActions actions, Navmesh navmesh, IObjectTab
             }
         }
         if (activeAction == null || target == null)
-            return "Watching for the next targetable mascot.";
+            return string.Empty;
 
         var player = objects.LocalPlayer;
         if (player != null && Vector3.Distance(player.Position, target.Position) > 20f)
         {
             if (!navmesh.IsMoving()) navmesh.MoveNear(target.Position, 15f);
-            return $"Moving into action range of {target.Name}.";
+            return string.Empty;
         }
 
         if (navmesh.IsMoving()) navmesh.Stop();

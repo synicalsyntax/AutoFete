@@ -22,8 +22,6 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
         FeteStage.ToyHunter, FateId, Name, GoldCount, Waypoint, Targets,
         WaitForJoinConfirmation: true, UsesHandinDialogs: true);
 
-    private DateTime nextPresentBoxInteractUtc;
-    private DateTime nextPiggyInteractUtc;
     private DateTime waitingForBoxResultUntilUtc;
     private DateTime waitingForPiggyHandinUntilUtc;
     private bool presentBoxResultPending;
@@ -32,10 +30,8 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
     private ulong? lastOpenedBoxId;
     private Vector3? boxRouteDestination;
 
-    public override void Reset()
+    protected override void ResetStage()
     {
-        nextPresentBoxInteractUtc = DateTime.MinValue;
-        nextPiggyInteractUtc = DateTime.MinValue;
         waitingForBoxResultUntilUtc = DateTime.MinValue;
         waitingForPiggyHandinUntilUtc = DateTime.MinValue;
         presentBoxResultPending = false;
@@ -45,13 +41,11 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
         boxRouteDestination = null;
     }
 
-    public override string Tick(byte handInCount) => TickToyHunter(handInCount);
-
-    private string TickToyHunter(byte handInCount)
+    public override string Tick(byte handInCount)
     {
         var toyCount = GameActions.GetKeyItemCount(LuckyToyEventItemId);
         if (toyCount < 0)
-            return "Waiting for the key-item inventory to load.";
+            return string.Empty;
 
         if (previousToyHunterHandinCount >= 0 && handInCount > previousToyHunterHandinCount)
         {
@@ -64,7 +58,7 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
         if (handInCount >= GoldCount)
         {
             if (navmesh.IsMoving()) navmesh.Stop();
-            return "Four lucky toys turned in; waiting for the Fête to finish.";
+            return string.Empty;
         }
 
         // A losing box transforms the player for about five seconds. Walk to
@@ -76,10 +70,11 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
             actions.ClearTarget();
             var nextBox = FindNextPresentBox(onlyTargetable: false);
             if (nextBox == null)
-                return "Transformed into a piggy; looking for another present box.";
+                return MissingTarget("present-box", StatusText.Get("Target_PresentBox"));
+            ClearMissingTarget();
             if (MoveWithin(nextBox.Position, 3f, ref boxRouteDestination))
-                return "Transformed into a piggy; moving to the next present box.";
-            return "Transformed into a piggy; waiting to open the next present box.";
+                return string.Empty;
+            return string.Empty;
         }
 
         if (toyCount > 0)
@@ -98,7 +93,7 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
                 assumedLuckyToy = true;
             }
             else if (DateTime.UtcNow < waitingForBoxResultUntilUtc)
-                return "Opening a present box; waiting to see what was inside.";
+                return string.Empty;
             else
                 presentBoxResultPending = false;
         }
@@ -107,41 +102,38 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
         {
             var piggy = FindTarget("perky-piggy");
             if (piggy == null)
-                return "Carrying a lucky toy; looking for Perky Piggy.";
+                return MissingTarget("perky-piggy", StatusText.Get("Target_PerkyPiggy"));
             actions.SelectTarget(piggy);
             if (MoveWithin(piggy.Position, 3f))
-                return "Carrying a lucky toy to Perky Piggy.";
+                return StatusText.Format("Progress_DeliveringTo", piggy.Name);
             if (toyCount == 0 && DateTime.UtcNow < waitingForPiggyHandinUntilUtc)
-                return "Waiting for Perky Piggy to accept the lucky toy.";
+                return string.Empty;
             if (toyCount == 0 && waitingForPiggyHandinUntilUtc != DateTime.MinValue &&
                 DateTime.UtcNow >= waitingForPiggyHandinUntilUtc)
                 assumedLuckyToy = false;
             else
             {
-                if (DateTime.UtcNow >= nextPiggyInteractUtc &&
-                    actions.TryInteract(piggy, objects.LocalPlayer!.Position))
+                if (TryInteract("perky-piggy", piggy))
                 {
-                    nextPiggyInteractUtc = DateTime.UtcNow.AddSeconds(2);
                     waitingForPiggyHandinUntilUtc = DateTime.UtcNow.AddSeconds(6);
                 }
-                return $"Turning in a lucky toy to Perky Piggy ({handInCount}/4).";
+                return StatusText.Format("Progress_DeliveringTo", piggy.Name);
             }
         }
 
         var box = FindNextPresentBox(onlyTargetable: true);
         if (box == null)
-            return "Looking for a targetable present box.";
+            return MissingTarget("present-box", StatusText.Get("Target_PresentBox"));
+        ClearMissingTarget();
         if (MoveWithin(box.Position, 3f, ref boxRouteDestination))
-            return "Moving to a present box.";
-        if (DateTime.UtcNow >= nextPresentBoxInteractUtc &&
-            actions.TryInteract(box, objects.LocalPlayer!.Position))
+            return string.Empty;
+        if (TryInteract("present-box", box))
         {
             lastOpenedBoxId = box.GameObjectId;
-            nextPresentBoxInteractUtc = DateTime.UtcNow.AddSeconds(2);
             waitingForBoxResultUntilUtc = DateTime.UtcNow.AddSeconds(8);
             presentBoxResultPending = true;
         }
-        return "Opening a present box.";
+        return StatusText.Get("Progress_OpeningPresentBox");
     }
 
     private IGameObject? FindNextPresentBox(bool onlyTargetable)

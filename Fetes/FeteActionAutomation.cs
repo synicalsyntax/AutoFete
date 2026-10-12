@@ -15,9 +15,12 @@ internal sealed class FeteActionAutomation(GameActions actions, Navmesh navmesh,
             handler.Reset();
     }
 
-    public string? Tick(ushort fateId, byte handInCount) =>
-        FeteCatalog.Find(fateId) is { } definition &&
-        handlers.TryGetValue(definition.Stage, out var handler)
-            ? handler.Tick(handInCount)
-            : $"Joined {FeteCatalog.Find(fateId)?.Name}. Stage handler still pending.";
+    public string? Tick(ushort fateId, byte handInCount)
+    {
+        var definition = FeteCatalog.Find(fateId);
+        return definition is { } stage &&
+               handlers.TryGetValue(stage.Stage, out var handler)
+                   ? handler.Tick(handInCount)
+                   : StatusText.Format("Error_NoStageAutomation", definition?.Name);
+    }
 }

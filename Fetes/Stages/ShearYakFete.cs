@@ -28,28 +28,22 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
 
     private DateTime nextClipperUtc;
     private DateTime yakInRangeSinceUtc;
-    private DateTime nextFleeceInteractUtc;
-    private DateTime nextHandinInteractUtc;
     private int completedYakHandins;
     private int previousFleeceCount = -1;
 
-    public override void Reset()
+    protected override void ResetStage()
     {
         nextClipperUtc = DateTime.MinValue;
         yakInRangeSinceUtc = DateTime.MinValue;
-        nextFleeceInteractUtc = DateTime.MinValue;
-        nextHandinInteractUtc = DateTime.MinValue;
         completedYakHandins = 0;
         previousFleeceCount = -1;
     }
 
-    public override string? Tick(byte handInCount) => TickShearYak(handInCount);
-
-    private string? TickShearYak(byte handInCount)
+    public override string? Tick(byte handInCount)
     {
         var fleeceCount = GameActions.GetKeyItemCount(YakFleeceEventItemId);
         if (fleeceCount < 0)
-            return "Waiting for the key-item inventory to load.";
+            return string.Empty;
 
         if (previousFleeceCount >= 3 && fleeceCount == 0)
             completedYakHandins++;
@@ -59,7 +53,7 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
         if (completedYakHandins >= GoldCount)
         {
             if (navmesh.IsMoving()) navmesh.Stop();
-            return "Four fleece hand-ins complete; waiting for the Fête to finish.";
+            return string.Empty;
         }
 
         if (fleeceCount >= 3)
@@ -68,51 +62,47 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
             if (chocobo == null)
             {
                 actions.ClearTarget();
-                return "Carrying three fleece; waiting for Chirpy Chocobo.";
+                return MissingTarget("chirpy-chocobo", StatusText.Get("Target_ChirpyChocobo"));
             }
             if (MoveWithin(chocobo.Position, 3f))
             {
                 actions.ClearTarget();
-                return "Moving to Chirpy Chocobo with fleece.";
+                return StatusText.Format("Progress_DeliveringTo", chocobo.Name);
             }
             actions.SelectTarget(chocobo);
-            if (DateTime.UtcNow >= nextHandinInteractUtc &&
-                actions.TryInteract(chocobo, objects.LocalPlayer!.Position))
-                nextHandinInteractUtc = DateTime.UtcNow.AddSeconds(2);
-            return $"Turning in fleece to Chirpy Chocobo ({completedYakHandins} observed hand-ins).";
+            TryInteract("chirpy-chocobo", chocobo);
+            return StatusText.Format("Progress_DeliveringTo", chocobo.Name);
         }
 
         var fleece = FindTarget("yak-fleece");
         if (fleece != null)
         {
             if (MoveWithin(fleece.Position, 3f))
-                return $"Moving to yak fleece ({fleeceCount}/3 held).";
-            if (DateTime.UtcNow >= nextFleeceInteractUtc &&
-                actions.TryInteract(fleece, objects.LocalPlayer!.Position))
-                nextFleeceInteractUtc = DateTime.UtcNow.AddSeconds(2);
-            return $"Collecting yak fleece ({fleeceCount}/3 held).";
+                return string.Empty;
+            TryInteract("yak-fleece", fleece);
+            return StatusText.Get("Progress_CollectingYakFleece");
         }
 
         if (DateTime.UtcNow < nextClipperUtc)
-            return $"Waiting for fleece to appear ({fleeceCount}/3 held).";
+            return string.Empty;
 
         var yak = FindTarget("wooly-yak");
         if (yak == null)
         {
             yakInRangeSinceUtc = DateTime.MinValue;
-            return "Waiting for the Wooly Yak.";
+            return MissingTarget("wooly-yak", StatusText.Get("Target_WoolyYak"));
         }
         if (MoveWithin(yak.Position, 20f))
         {
             yakInRangeSinceUtc = DateTime.MinValue;
-            return "Moving into clipper range of the Wooly Yak.";
+            return string.Empty;
         }
 
         var now = DateTime.UtcNow;
         if (yakInRangeSinceUtc == DateTime.MinValue)
             yakInRangeSinceUtc = now;
         if (now - yakInRangeSinceUtc < TimeSpan.FromMilliseconds(500))
-            return null;
+            return string.Empty;
 
         if (actions.TryUseFeteAction(FateId, ClipperAction, yak, out var actionResult))
         {
@@ -120,6 +110,6 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
             yakInRangeSinceUtc = DateTime.MinValue;
             return actionResult;
         }
-        return "Waiting to use the Aetheromatic Clipper on the Wooly Yak.";
+        return string.Empty;
     }
 }

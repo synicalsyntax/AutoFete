@@ -11,26 +11,68 @@ internal abstract class FeteStageHandler(FeteDefinition definition, GameActions 
     protected readonly GameActions actions = actions;
     protected readonly Navmesh navmesh = navmesh;
     protected readonly IObjectTable objects = objects;
+    private readonly Dictionary<string, DateTime> nextInteractionUtc = [];
+    private string? missingTargetRole;
+    private DateTime missingTargetSinceUtc;
 
-    public abstract void Reset();
+    public void Reset()
+    {
+        ClearMissingTarget();
+        nextInteractionUtc.Clear();
+        ResetStage();
+    }
+
+    protected abstract void ResetStage();
     public abstract string? Tick(byte handInCount);
 
-    protected IGameObject? FindTarget(string role) => actions.FindTarget(definition, role);
+    protected IGameObject? FindTarget(string role)
+    {
+        var target = actions.FindTarget(definition, role);
+        if (target != null)
+            ClearMissingTarget();
+        return target;
+    }
+
+    protected string MissingTarget(string role, string name)
+    {
+        var now = DateTime.UtcNow;
+        if (missingTargetRole != role)
+        {
+            missingTargetRole = role;
+            missingTargetSinceUtc = now;
+        }
+        return now - missingTargetSinceUtc >= TimeSpan.FromSeconds(8)
+            ? StatusText.Format("Error_CannotFindTarget", name)
+            : string.Empty;
+    }
+
+    protected void ClearMissingTarget()
+    {
+        missingTargetRole = null;
+        missingTargetSinceUtc = DateTime.MinValue;
+    }
 
     protected bool Matches(string role, IGameObject target) =>
         FeteTargets.Matches(definition, role, target);
 
+    protected bool TryInteract(string role, IGameObject target)
+    {
+        var now = DateTime.UtcNow;
+        if (nextInteractionUtc.TryGetValue(role, out var nextAttempt) && now < nextAttempt)
+            return false;
+
+        var player = objects.LocalPlayer;
+        if (player == null || !actions.TryInteract(target, player.Position))
+            return false;
+
+        nextInteractionUtc[role] = DateTime.UtcNow.AddSeconds(2);
+        return true;
+    }
+
     protected bool MoveWithin(Vector3 position, float range)
     {
-        var player = objects.LocalPlayer;
-        if (player == null || Vector3.Distance(player.Position, position) <= range)
-        {
-            if (navmesh.IsMoving()) navmesh.Stop();
-            return false;
-        }
-
-        if (!navmesh.IsMoving()) navmesh.MoveNear(position, Math.Max(1f, range - 1f));
-        return true;
+        Vector3? routeDestination = null;
+        return MoveWithin(position, range, ref routeDestination);
     }
 
     // Repath when the desired object changes while a route is already running.

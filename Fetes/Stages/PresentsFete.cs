@@ -28,46 +28,39 @@ internal sealed class PresentsFete(GameActions actions, Navmesh navmesh, IObject
         FeteStage.Presents, FateId, Name, GoldCount, Waypoint, Targets,
         WaitForJoinConfirmation: true, UsesHandinDialogs: true);
 
-    private static readonly string[] PresentSourceRoles =
-        ["child-present", "artisan-present", "merchant-present"];
-    private static readonly string[] ChildRecipientRoles = ["firmament-boy", "firmament-girl"];
-    private static readonly string[] ArtisanRecipientRoles =
-        ["skysteel-engineer", "dzemael-stonemason"];
-    private static readonly string[] MerchantRecipientRoles =
-        ["foreign-merchant", "ishgardian-merchant"];
-    private static readonly (string Role, Vector3 Position)[] PresentSources =
+    private sealed record PresentRoute(string SourceRole, Vector3 SourcePosition,
+        string DisplayNameKey, string[] RecipientRoles);
+
+    private static readonly PresentRoute[] PresentRoutes =
     [
-        ("child-present", new Vector3(42.01f, -18.9f, 29.41f)),
-        ("merchant-present", new Vector3(50.43f, -18.5f, 28.75f)),
-        ("artisan-present", new Vector3(57.83f, -18.5f, 28.32f)),
+        new("child-present", new(42.01f, -18.9f, 29.41f), "Target_ChildrenPresent",
+            ["firmament-boy", "firmament-girl"]),
+        new("artisan-present", new(57.83f, -18.5f, 28.32f), "Target_ArtisanPresent",
+            ["skysteel-engineer", "dzemael-stonemason"]),
+        new("merchant-present", new(50.43f, -18.5f, 28.75f), "Target_MerchantPresent",
+            ["foreign-merchant", "ishgardian-merchant"]),
     ];
     private static readonly Vector3 PresentDeliveryArea = new(48f, -20f, 75f);
     private Vector3? pickupRouteDestination;
     private string? pendingPresentRole;
     private string? carriedPresentRole;
-    private DateTime nextPresentPickupUtc;
-    private DateTime nextPresentDeliveryUtc;
     private DateTime waitingForPresentPickupUntilUtc;
     private DateTime waitingForPresentCreditUntilUtc;
     private bool awaitingPresentCredit;
     private int previousPresentsHandinCount = -1;
 
-    public override void Reset()
+    protected override void ResetStage()
     {
         pendingPresentRole = null;
         carriedPresentRole = null;
         pickupRouteDestination = null;
-        nextPresentPickupUtc = DateTime.MinValue;
-        nextPresentDeliveryUtc = DateTime.MinValue;
         waitingForPresentPickupUntilUtc = DateTime.MinValue;
         waitingForPresentCreditUntilUtc = DateTime.MinValue;
         awaitingPresentCredit = false;
         previousPresentsHandinCount = -1;
     }
 
-    public override string Tick(byte handInCount) => TickPresents(handInCount);
-
-    private string TickPresents(byte handInCount)
+    public override string Tick(byte handInCount)
     {
         if (previousPresentsHandinCount >= 0 && handInCount > previousPresentsHandinCount)
         {
@@ -81,7 +74,7 @@ internal sealed class PresentsFete(GameActions actions, Navmesh navmesh, IObject
         if (handInCount >= GoldCount)
         {
             if (navmesh.IsMoving()) navmesh.Stop();
-            return "Six presents delivered; waiting for the Fête to finish.";
+            return string.Empty;
         }
 
         var carryingPresent = actions.CarryingObject ||
@@ -92,71 +85,71 @@ internal sealed class PresentsFete(GameActions actions, Navmesh navmesh, IObject
             carriedPresentRole ??= pendingPresentRole;
             pendingPresentRole = null;
             if (carriedPresentRole == null)
-                return "Carrying an unidentified present; finish this delivery manually.";
+                return StatusText.Get("Error_UnidentifiedPresent");
 
             if (awaitingPresentCredit && DateTime.UtcNow < waitingForPresentCreditUntilUtc)
-                return "Waiting for the present delivery to complete.";
+                return string.Empty;
             awaitingPresentCredit = false;
 
-            var recipient = FindClosestPresentTarget(RecipientRoles(carriedPresentRole));
+            var route = PresentRoutes.FirstOrDefault(x => x.SourceRole == carriedPresentRole);
+            var recipient = FindClosestTarget(route?.RecipientRoles ?? []).Target;
             if (recipient == null)
             {
                 if (MoveWithin(PresentDeliveryArea, 8f))
-                    return $"Moving toward {carriedPresentRole} recipients.";
-                return $"Looking for an available {carriedPresentRole} recipient.";
+                    return string.Empty;
+                return MissingTarget("recipient", StatusText.Format("Target_RecipientForPresent",
+                    route == null ? carriedPresentRole : StatusText.Get(route.DisplayNameKey)));
             }
 
             actions.SelectTarget(recipient);
             if (MoveWithin(recipient.Position, 3f))
-                return $"Carrying {carriedPresentRole} to {recipient.Name}.";
-            if (DateTime.UtcNow >= nextPresentDeliveryUtc &&
-                actions.TryInteract(recipient, objects.LocalPlayer!.Position))
+                return StatusText.Format("Progress_DeliveringTo", recipient.Name);
+            if (TryInteract("present-delivery", recipient))
             {
-                nextPresentDeliveryUtc = DateTime.UtcNow.AddSeconds(2);
                 waitingForPresentCreditUntilUtc = DateTime.UtcNow.AddSeconds(8);
                 awaitingPresentCredit = true;
             }
-            return $"Delivering {carriedPresentRole} to {recipient.Name} ({handInCount}/6).";
+            return StatusText.Format("Progress_DeliveringTo", recipient.Name);
         }
 
         if (awaitingPresentCredit && DateTime.UtcNow < waitingForPresentCreditUntilUtc)
-            return "Waiting for Fête credit for the present delivery.";
+            return string.Empty;
         awaitingPresentCredit = false;
         carriedPresentRole = null;
 
         if (pendingPresentRole != null && DateTime.UtcNow < waitingForPresentPickupUntilUtc)
-            return $"Picking up {pendingPresentRole}; waiting for carry state.";
+            return string.Empty;
         pendingPresentRole = null;
 
-        var (role, present) = FindClosestPresentSource();
+        var (role, present) = FindClosestTarget(PresentRoutes.Select(x => x.SourceRole));
         if (present == null)
         {
             var position = objects.LocalPlayer!.Position;
-            var nextSource = PresentSources.MinBy(source =>
-                Vector3.DistanceSquared(position, source.Position));
-            if (MoveWithin(nextSource.Position, 3f, ref pickupRouteDestination))
-                return $"Moving directly to the {nextSource.Role} source.";
-            return "Waiting for a present to become targetable.";
+            var nextSource = PresentRoutes.MinBy(source =>
+                Vector3.DistanceSquared(position, source.SourcePosition))!;
+            if (MoveWithin(nextSource.SourcePosition, 3f, ref pickupRouteDestination))
+                return string.Empty;
+            return MissingTarget("present-source", StatusText.Get("Target_PresentSource"));
         }
 
+        ClearMissingTarget();
+
         if (MoveWithin(present.Position, 3f, ref pickupRouteDestination))
-            return $"Moving to {present.Name}.";
-        if (DateTime.UtcNow >= nextPresentPickupUtc &&
-            actions.TryInteract(present, objects.LocalPlayer!.Position))
+            return string.Empty;
+        if (TryInteract("present-pickup", present))
         {
-            nextPresentPickupUtc = DateTime.UtcNow.AddSeconds(2);
             waitingForPresentPickupUntilUtc = DateTime.UtcNow.AddSeconds(10);
             pendingPresentRole = role;
         }
-        return $"Picking up {present.Name}.";
+        return StatusText.Format("Progress_PickingUp", present.Name);
     }
 
-    private (string? Role, IGameObject? Target) FindClosestPresentSource()
+    private (string? Role, IGameObject? Target) FindClosestTarget(IEnumerable<string> roles)
     {
         string? bestRole = null;
         IGameObject? bestTarget = null;
         var position = objects.LocalPlayer?.Position ?? Vector3.Zero;
-        foreach (var role in PresentSourceRoles)
+        foreach (var role in roles)
         {
             var target = FindTarget(role);
             if (target != null && (bestTarget == null ||
@@ -169,27 +162,4 @@ internal sealed class PresentsFete(GameActions actions, Navmesh navmesh, IObject
         }
         return (bestRole, bestTarget);
     }
-
-    private IGameObject? FindClosestPresentTarget(string[] roles)
-    {
-        IGameObject? bestTarget = null;
-        var position = objects.LocalPlayer?.Position ?? Vector3.Zero;
-        foreach (var role in roles)
-        {
-            var target = FindTarget(role);
-            if (target != null && (bestTarget == null ||
-                Vector3.DistanceSquared(position, target.Position) <
-                Vector3.DistanceSquared(position, bestTarget.Position)))
-                bestTarget = target;
-        }
-        return bestTarget;
-    }
-
-    private static string[] RecipientRoles(string sourceRole) => sourceRole switch
-    {
-        "child-present" => ChildRecipientRoles,
-        "artisan-present" => ArtisanRecipientRoles,
-        "merchant-present" => MerchantRecipientRoles,
-        _ => [],
-    };
 }

@@ -22,9 +22,7 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
         FeteStage.SofterStuff, FateId, Name, MinPointCount, Waypoint, Targets,
         WaitForJoinConfirmation: false, UsesHandinDialogs: true);
 
-    private bool wasCarryingToy;
-    private int completedToyHandins;
-    private bool toyDeliveryPending;
+    private int previousHandInCount = -1;
     private string? toyName;
     private DateTime waitingForToyUntilUtc;
     private DateTime waitingForPickupUntilUtc;
@@ -32,9 +30,7 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
 
     protected override void ResetStage()
     {
-        wasCarryingToy = false;
-        completedToyHandins = 0;
-        toyDeliveryPending = false;
+        previousHandInCount = -1;
         toyName = null;
         waitingForToyUntilUtc = DateTime.MinValue;
         waitingForPickupUntilUtc = DateTime.MinValue;
@@ -43,17 +39,12 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
     public override string Tick(byte handInCount, bool continueAfterFullCredit)
     {
         var carryingToy = actions.IsCarryingToy;
-        if (wasCarryingToy && !carryingToy && toyDeliveryPending)
-        {
-            completedToyHandins++;
+        if (previousHandInCount >= 0 && handInCount > previousHandInCount)
             toyName = null;
-        }
-        if (!carryingToy)
-            toyDeliveryPending = false;
-        wasCarryingToy = carryingToy;
+        previousHandInCount = handInCount;
 
-        if (ShouldComplete(completedToyHandins, continueAfterFullCredit))
-            return CompleteStage(completedToyHandins);
+        if (ShouldComplete(handInCount, continueAfterFullCredit))
+            return CompleteStage(handInCount);
 
         if (carryingToy)
         {
@@ -76,8 +67,7 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
                 toyName ?? TargetName("stuffed-toy"), wain.Name);
             if (MoveWithin(wain.Position, 3f))
                 return wainDeliveryStatus;
-            if (TryInteract("wain", wain))
-                toyDeliveryPending = true;
+            TryInteract("wain", wain);
             return wainDeliveryStatus;
         }
 

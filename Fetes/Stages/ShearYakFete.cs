@@ -30,7 +30,6 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
     private DateTime nextClipperUtc;
     private DateTime yakInRangeSinceUtc;
     private DateTime showFullFleeceUntilUtc;
-    private int completedYakHandins;
     private int previousFleeceCount = -1;
     private string? fleeceName;
 
@@ -39,7 +38,6 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
         nextClipperUtc = DateTime.MinValue;
         yakInRangeSinceUtc = DateTime.MinValue;
         showFullFleeceUntilUtc = DateTime.MinValue;
-        completedYakHandins = 0;
         previousFleeceCount = -1;
         fleeceName = null;
     }
@@ -52,13 +50,10 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
 
         if (fleeceCount >= FleecePerHandin && previousFleeceCount < FleecePerHandin)
             showFullFleeceUntilUtc = DateTime.UtcNow.AddSeconds(1);
-        if (previousFleeceCount >= FleecePerHandin && fleeceCount == 0)
-            completedYakHandins++;
         previousFleeceCount = fleeceCount;
 
-        completedYakHandins = Math.Max(completedYakHandins, handInCount);
-        if (ShouldComplete(completedYakHandins, continueAfterFullCredit))
-            return CompleteStage(completedYakHandins);
+        if (ShouldComplete(handInCount, continueAfterFullCredit))
+            return CompleteStage(handInCount);
 
         if (fleeceCount >= FleecePerHandin)
         {

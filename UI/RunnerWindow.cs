@@ -45,7 +45,7 @@ internal sealed class RunnerWindow : Window
             ShowTooltip = () =>
             {
                 ImGui.BeginTooltip();
-                ImGui.TextUnformatted(controller.IsArmed ? "Disable" : "Enable");
+                ImGui.TextUnformatted(controller.IsArmed ? "Stop automation" : "Start automation");
                 ImGui.EndTooltip();
             },
         };
@@ -62,39 +62,47 @@ internal sealed class RunnerWindow : Window
     {
         if (controller.IsArmed)
         {
-            ImGui.TextColored(ActiveColor, "Active");
-            ImGui.TextUnformatted("Stage:");
-            ImGui.SameLine();
-            ImGui.TextColoredWrapped(StageColor, activeStageLabel());
-            ImGui.TextColoredWrapped(StageColor, controller.Status);
+            var stage = activeStageLabel();
+            ImGui.TextColored(ActiveColor, StatusText.Get("Ui_Active"));
+            ImGui.TextUnformatted(StatusText.Get("Ui_StageLabel"));
+            ImGui.SameLine(0, 0);
+            ImGui.TextColoredWrapped(StageColor, $" {stage}");
+            if (!string.IsNullOrWhiteSpace(controller.Status))
+                ImGui.TextWrapped(controller.Status);
+            else if (stage == StatusText.Get("Ui_NoStage"))
+                ImGui.TextWrapped(StatusText.Get("Ui_WaitingForFete"));
         }
         else
         {
-            ImGui.TextColored(InactiveColor, "Inactive");
+            ImGui.TextColored(InactiveColor, StatusText.Get("Ui_Inactive"));
+            if (!string.IsNullOrWhiteSpace(controller.Status) &&
+                controller.Status != StatusText.Get("Stop_Default"))
+                ImGui.TextWrapped(controller.Status);
         }
 
         if (config.DebugEnabled)
         {
-            ImGui.Separator();
-            ImGui.Text("Fête waypoints (world coordinates):");
-            foreach (var stageInfo in FeteCatalog.Stages)
+            ImGui.Spacing();
+            if (ImGui.CollapsingHeader("Debug tools", ImGuiTreeNodeFlags.DefaultOpen))
             {
-                var waypoint = stageInfo.Waypoint;
-                ImGui.Text($"{stageInfo.Name}: {waypoint.X:F1}, {waypoint.Y:F1}, {waypoint.Z:F1}");
-            }
-            if (!controller.IsArmed && ImGui.Button("Track only"))
-                controller.Start(config.Mode);
-            if (ImGui.Button(recorder.IsRecording ? "Save capture" : "Record capture"))
-                toggleRecording();
-            ImGui.Text($"Recorded changes: {recorder.SampleCount}");
-            if (controller.CurrentStage is { } stage)
-            {
-                ImGui.Text($"{stage} target IDs:");
-                foreach (var role in FeteTargets.Roles[stage])
+                ImGui.TextColored(StageColor, "Game state capture");
+                if (ImGui.Button(recorder.IsRecording ? "Save capture" : "Start capture"))
+                    toggleRecording();
+                ImGui.SameLine();
+                ImGui.Text($"Snapshots recorded: {recorder.SampleCount}");
+                ImGui.TextWrapped("Records FATE state, statuses, targets, and nearby objects during automated or manual play.");
+                ImGui.TextWrapped("Save capture writes a JSONL file to the plugin configuration folder for future analysis.");
+                if (controller.CurrentStage is { } stage)
                 {
-                    var hints = string.Join(", ", FeteTargets.Hints(stage, role)
-                        .Select(x => $"{x.Sheet} #{x.RowId}"));
-                    ImGui.TextUnformatted($"{role}: {hints}");
+                    ImGui.Separator();
+                    ImGui.TextColored(StageColor, "Current stage target IDs");
+                    ImGui.TextUnformatted(stage.ToString());
+                    foreach (var role in FeteTargets.Roles[stage])
+                    {
+                        var hints = string.Join(", ", FeteTargets.Hints(stage, role)
+                            .Select(x => $"{x.Sheet} #{x.RowId}"));
+                        ImGui.TextUnformatted($"{role}: {hints}");
+                    }
                 }
             }
         }

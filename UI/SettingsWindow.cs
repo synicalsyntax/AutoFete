@@ -19,6 +19,7 @@ internal sealed class SettingsWindow(Configuration config, CaptureRecorder recor
             config.Mode = mode == 0 ? RunMode.OneSequence : RunMode.RemainingCycle;
             saveConfig();
         }
+        ImGui.TextWrapped("One cycle disables automation after the final Fête in a cycle. Continuous session keeps automation enabled through later cycles until stopped.");
 
         ImGui.Separator();
 

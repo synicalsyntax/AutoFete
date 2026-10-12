@@ -46,6 +46,7 @@ public sealed class Plugin : IDalamudPlugin
         this.log = log;
         this.clientState = clientState;
         this.fates = fates;
+        StatusText.SetLanguage(clientState.ClientLanguage);
         var configPath = pluginInterface.ConfigFile.FullName;
         var loadedConfig = false;
         try
@@ -89,7 +90,7 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenMainUi -= OpenWindow;
         pluginInterface.UiBuilder.OpenConfigUi -= OpenSettingsWindow;
         commands.RemoveHandler("/autofete");
-        controller.Stop("Plugin unloaded.");
+        controller.Stop(StatusText.Get("Stop_PluginUnloaded"));
         handinDialogs.Dispose();
         if (recorder.IsRecording)
             StopRecording();
@@ -105,27 +106,28 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception e)
         {
             log.Error(e, "Could not save AutoFete settings");
-            chat.PrintError("Could not save settings. See /xllog.", "AutoFete");
+            chat.PrintError("ERROR: Could not save settings. See /xllog.", "AutoFete");
         }
     }
 
     private string ActiveStageLabel()
     {
-        var running = fates.FirstOrDefault(f =>
-            f.State == FateState.Running && FeteCatalog.Find(f.FateId) != null);
-        if (running != null)
-            return FeteCatalog.Find(running.FateId)!.Value.Name;
+        var known = FeteCatalog.WithDefinitions(fates)
+            .Where(x => x.Stage != null)
+            .ToArray();
+        var running = known.FirstOrDefault(x => x.Fate.State == FateState.Running);
+        if (running.Fate != null)
+            return running.Stage!.Value.Name;
 
-        var ending = fates.FirstOrDefault(f =>
-            f.State == FateState.Ending && FeteCatalog.Find(f.FateId)?.Stage == controller.CurrentStage);
-        if (ending != null)
-            return $"{FeteCatalog.Find(ending.FateId)!.Value.Name} (ending)";
+        var ending = known.FirstOrDefault(x =>
+            x.Fate.State == FateState.Ending && x.Stage!.Value.Stage == controller.CurrentStage);
+        if (ending.Fate != null)
+            return StatusText.Format("Ui_StageEnding", ending.Stage!.Value.Name);
 
-        var preparing = fates.FirstOrDefault(f =>
-            f.State == FateState.Preparing && FeteCatalog.Find(f.FateId) != null);
-        return preparing == null
-            ? "None"
-            : $"{FeteCatalog.Find(preparing.FateId)!.Value.Name} (preparing)";
+        var preparing = known.FirstOrDefault(x => x.Fate.State == FateState.Preparing);
+        return preparing.Fate == null
+            ? StatusText.Get("Ui_NoStage")
+            : StatusText.Format("Ui_StagePreparing", preparing.Stage!.Value.Name);
     }
 
     private void OnUpdate(IFramework _)
@@ -140,7 +142,7 @@ public sealed class Plugin : IDalamudPlugin
         }
         catch (Exception e)
         {
-            controller.Stop("Stopped after an unexpected error. See /xllog.");
+            controller.Stop(StatusText.Get("Stop_UnexpectedError"));
             handinDialogs.Disable();
             log.Error(e, "AutoFete update failed");
         }
@@ -154,11 +156,11 @@ public sealed class Plugin : IDalamudPlugin
                 if (!controller.Start(config.Mode, join: true))
                     chat.PrintError(controller.Status, "AutoFete");
                 else
-                    chat.Print("Fête automation started.", "AutoFete");
+                    chat.Print(StatusText.Get("Result_AutomationStarted"), "AutoFete");
                 break;
             case "stop":
                 controller.Stop();
-                chat.Print("Stopped.", "AutoFete");
+                chat.Print(StatusText.Get("Stop_Default"), "AutoFete");
                 break;
             case "debug":
                 if (!config.DebugEnabled)
@@ -184,12 +186,12 @@ public sealed class Plugin : IDalamudPlugin
 
         if (!clientState.IsLoggedIn || clientState.TerritoryType != FeteCatalog.FirmamentTerritoryId)
         {
-            chat.PrintError("Enter the Firmament before recording.", "AutoFete");
+            chat.PrintError(StatusText.Get("Error_EnterFirmament"), "AutoFete");
             return;
         }
 
         recorder.Start();
-        chat.Print("Recording FATEs, statuses, and nearby objects. Save from the debug window.", "AutoFete");
+        chat.Print("Capture started.", "AutoFete");
     }
 
     private void StopRecording()
@@ -202,7 +204,7 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception e)
         {
             log.Error(e, "Could not save Fête capture");
-            chat.PrintError("Could not save capture. See /xllog.", "AutoFete");
+            chat.PrintError("ERROR: Could not save capture. See /xllog.", "AutoFete");
         }
     }
 }

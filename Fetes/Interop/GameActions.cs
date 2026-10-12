@@ -5,7 +5,6 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Fate;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
-using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using System.Numerics;
 
@@ -26,7 +25,14 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
 
     public bool CarryingObject => condition[ConditionFlag.CarryingObject];
     public bool CarryingItem => condition[ConditionFlag.CarryingItem];
-    public string LastJoinAttempt { get; private set; } = "No join request sent.";
+    public string? LastJoinAttempt { get; private set; }
+    public string? LastJoinError { get; private set; }
+
+    public void ResetJoinStatus()
+    {
+        LastJoinAttempt = null;
+        LastJoinError = null;
+    }
 
     public void SelectTarget(IGameObject target)
     {
@@ -64,21 +70,21 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
 
         if (Vector3.Distance(playerPosition, fatePosition) > radius)
         {
-            LastJoinAttempt = "Outside the reported FATE circle.";
+            RecordJoinFailure("outside_fate_area");
             return false;
         }
 
         var manager = FateManager.Instance();
         if (manager == null || manager->GetFateById(fateId) == null)
         {
-            LastJoinAttempt = "FATE is not available to the client.";
+            RecordJoinFailure("fate_unavailable");
             return false;
         }
 
         var currentId = manager->GetCurrentFateId();
         if (currentId != 0 && currentId != fateId)
         {
-            LastJoinAttempt = $"Client still has FATE {currentId} selected.";
+            RecordJoinFailure($"different_fate_selected:{currentId}");
             return false;
         }
 
@@ -87,8 +93,20 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
         // param1 = FATE ID and param2 = 1 to join. Sending an explicit 'on'
         // request also avoids toggling off an already-joined FATE.
         var sent = GameMain.ExecuteCommand(813, fateId, 1);
-        LastJoinAttempt = sent ? "Join FATE (level sync on) sent." : "Join FATE request rejected.";
+        if (sent)
+        {
+            LastJoinAttempt = "request_sent";
+            LastJoinError = null;
+        }
+        else
+            RecordJoinFailure("request_rejected");
         return sent;
+    }
+
+    private void RecordJoinFailure(string reason)
+    {
+        LastJoinAttempt = reason;
+        LastJoinError = StatusText.Get("Error_JoinFailed");
     }
 
     public bool TryInteract(IGameObject target, Vector3 playerPosition)
@@ -116,10 +134,6 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
         .Where(x => x.IsTargetable && FeteTargets.Matches(definition, role, x))
         .OrderBy(x => Vector3.Distance(objects.LocalPlayer?.Position ?? Vector3.Zero, x.Position))
         .FirstOrDefault();
-
-    public static ushort? ReadEmoteId(IGameObject actor) => actor is ICharacter && actor.Address != 0
-        ? ((Character*)actor.Address)->EmoteController.EmoteId
-        : null;
 
     public static int GetKeyItemCount(uint itemId)
     {
@@ -180,16 +194,14 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
 
     public bool TryUseFeteAction(ushort fateId, FeteAction action, IGameObject target, out string result)
     {
-        result = "Action unavailable.";
-        if (FeteCatalog.Find(fateId)?.Stage != action.Stage || !IsJoined(fateId))
-        {
-            result = "Join the matching Fête first.";
+        result = StatusText.Get("Error_ActionUnavailable");
+        var definition = FeteCatalog.Find(fateId);
+        if (definition?.Stage != action.Stage || !IsJoined(fateId))
             return false;
-        }
 
         if (DateTime.UtcNow < nextActionUtc)
         {
-            result = "Waiting for the action delay.";
+            result = string.Empty;
             return false;
         }
 
@@ -197,22 +209,21 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
             condition[ConditionFlag.OccupiedInQuestEvent] ||
             condition[ConditionFlag.Mounted])
         {
-            result = "Cannot use a Fête action during another interaction or while mounted.";
+            result = string.Empty;
             return false;
         }
 
         if (target is not ICharacter || !target.IsTargetable || target.Address == 0 ||
-            FeteCatalog.Find(fateId) is not { } definition ||
-            !FeteTargets.Matches(definition, action.TargetRole, target))
+            !FeteTargets.Matches(definition.Value, action.TargetRole, target))
         {
-            result = $"No targetable NPC mapped as {action.TargetRole} is nearby.";
+            result = StatusText.Format("Error_CannotFindTarget", StatusText.ActionTargetRole(action.TargetRole));
             return false;
         }
 
         var player = objects.LocalPlayer;
         if (player == null || Vector3.Distance(player.Position, target.Position) > 30f)
         {
-            result = $"Move closer to {target.Name}.";
+            result = StatusText.Format("Error_TooFarFromTarget", target.Name);
             return false;
         }
 
@@ -224,23 +235,14 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
         if (!ActionManager.CanUseActionOnTarget(adjusted, (GameObject*)target.Address) ||
             manager->GetActionStatus(ActionType.Action, adjusted, target.GameObjectId) != 0)
         {
-            result = $"{action.Name} is not usable on {target.Name} right now.";
+            result = string.Empty;
             return false;
         }
 
         targets.Target = target;
         nextActionUtc = DateTime.UtcNow.AddMilliseconds(650);
         var sent = manager->UseAction(ActionType.Action, adjusted, target.GameObjectId);
-        result = sent
-            ? $"Used {action.Name} on {target.Name}. Waiting for event credit."
-            : $"The game rejected {action.Name} on {target.Name}.";
+        result = sent ? string.Empty : StatusText.Format("Error_ActionRejected", action.Name, target.Name);
         return sent;
-    }
-
-    public uint? GetObjectiveNpc(ushort fateId)
-    {
-        var manager = FateManager.Instance();
-        var fate = manager == null ? null : manager->GetFateById(fateId);
-        return fate == null || fate->ObjectiveNpc is 0 or 0xE0000000 ? null : fate->ObjectiveNpc;
     }
 }

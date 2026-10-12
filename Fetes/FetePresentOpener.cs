@@ -20,7 +20,6 @@ internal sealed class FetePresentOpener(GameActions actions)
     public void Start(bool waitForRewards = false)
     {
         IsActive = true;
-        Status = waitForRewards ? "Waiting for Fête rewards." : "Opening Fête presents in inventory.";
         startedUtc = DateTime.UtcNow;
         nextAttemptUtc = waitForRewards ? startedUtc.AddSeconds(3) : startedUtc;
         countBeforeUse = 0;
@@ -28,6 +27,7 @@ internal sealed class FetePresentOpener(GameActions actions)
         opened = 0;
         waitingForConsumption = false;
         blockedCount = -1;
+        Status = waitForRewards ? StatusText.Get("Progress_WaitingForRewards") : StatusText.Get("Progress_OpeningPresents");
     }
 
     public void Reset()
@@ -47,7 +47,7 @@ internal sealed class FetePresentOpener(GameActions actions)
         var count = GameActions.GetInventoryItemCount(PresentItemId);
         if (count < 0)
         {
-            Status = "Waiting for inventory to become available.";
+            Status = string.Empty;
             return FinishIfTimedOut(now);
         }
 
@@ -61,33 +61,31 @@ internal sealed class FetePresentOpener(GameActions actions)
 
         if (now < nextAttemptUtc)
         {
-            Status = waitingForConsumption
-                ? $"Opening Fête presents: {opened} opened; waiting for item use."
-                : $"Opening Fête presents: {opened} opened; waiting for rewards.";
+            Status = StatusText.Get("Progress_OpeningPresents");
             return false;
         }
 
         if (count == 0)
         {
-            Complete($"Fête presents opened: {opened}.");
+            Complete(StatusText.Format("Result_PresentsOpened", opened));
             return true;
         }
 
         if (now - startedUtc > TimeSpan.FromMinutes(2) || failedAttempts >= 3)
         {
-            Complete($"Could not open all Fête presents; {count} remain in inventory.", count);
+            Complete(StatusText.Format("Error_PresentsRemain", count), count);
             return true;
         }
 
         if (!actions.CanUseInventoryItem)
         {
-            Status = "Waiting to use Fête presents.";
+            Status = string.Empty;
             return false;
         }
 
         if (GameActions.GetFreeInventorySlots() == 0)
         {
-            Complete($"Could not open Fête presents; inventory is full ({count} remain).", count);
+            Complete(StatusText.Format("Error_InventoryFull", count), count);
             return true;
         }
 
@@ -95,9 +93,7 @@ internal sealed class FetePresentOpener(GameActions actions)
         waitingForConsumption = GameActions.TryUseInventoryItem(PresentItemId);
         failedAttempts++;
         nextAttemptUtc = now.AddSeconds(waitingForConsumption ? 4 : 2);
-        Status = waitingForConsumption
-            ? $"Opening Fête presents: {opened} opened; waiting for item use."
-            : $"Fête present use was rejected; retrying ({failedAttempts}/3).";
+        Status = StatusText.Get("Progress_OpeningPresents");
         return false;
     }
 
@@ -105,7 +101,7 @@ internal sealed class FetePresentOpener(GameActions actions)
     {
         if (now - startedUtc <= TimeSpan.FromMinutes(2))
             return false;
-        Complete("Could not open Fête presents; inventory was unavailable.");
+        Complete(StatusText.Get("Error_InventoryUnavailable"));
         return true;
     }
 

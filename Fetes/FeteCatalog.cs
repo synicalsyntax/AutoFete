@@ -1,3 +1,4 @@
+using Dalamud.Game.ClientState.Fates;
 using Dalamud.Plugin.Services;
 
 namespace AutoFete;
@@ -5,6 +6,8 @@ namespace AutoFete;
 internal readonly record struct FeteRegistration(
     FeteDefinition Definition,
     Func<GameActions, Navmesh, IObjectTable, FeteStageHandler> CreateHandler);
+
+internal readonly record struct FeteFate(IFate Fate, FeteDefinition? Stage);
 
 internal static class FeteCatalog
 {
@@ -41,6 +44,9 @@ internal static class FeteCatalog
     public static FeteDefinition? Find(string name) =>
         Stages.FirstOrDefault(stage => string.Equals(stage.Name, name,
             StringComparison.OrdinalIgnoreCase)) is { FateId: not 0 } stage ? stage : null;
+
+    public static FeteFate[] WithDefinitions(IFateTable fates) =>
+        fates.Select(fate => new FeteFate(fate, Find(fate.FateId))).ToArray();
 
     public static FeteStage Next(FeteStage stage)
     {

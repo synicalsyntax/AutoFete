@@ -19,7 +19,7 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
     private bool joinedCurrentStage;
 
     public bool IsArmed { get; private set; }
-    public string Status { get; private set; } = "Stopped";
+    public string Status { get; private set; } = StatusText.Get("Stop_Default");
     public RunMode Mode { get; private set; }
     public FeteStage? CurrentStage => currentStage;
     public bool WantsHandinDialogs => autoJoin && currentFateId is { } id &&
@@ -31,54 +31,39 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
     {
         if (!clientState.IsLoggedIn || clientState.TerritoryType != FeteCatalog.FirmamentTerritoryId)
         {
-            Status = "Enter the Firmament before starting.";
+            Status = StatusText.Get("Error_EnterFirmament");
             return false;
         }
 
         var job = objects.LocalPlayer?.ClassJob.RowId ?? 0;
         if (job is < 8 or > 18)
         {
-            Status = "Switch to a Disciple of the Hand or Land.";
+            Status = StatusText.Get("Error_ChangeToCrafterOrGatherer");
             return false;
         }
 
         if (!navmesh.IsReady())
         {
-            Status = "vnavmesh is missing or its navigation mesh is not ready.";
+            Status = StatusText.Get("Error_NavmeshUnavailable");
             return false;
         }
 
         Mode = mode;
         autoJoin = join;
         IsArmed = true;
-        currentFateId = null;
-        currentStage = null;
-        lastCompletedStage = null;
-        routeDestination = null;
-        sawFinalStage = false;
-        processingCycleRewards = false;
-        presentOpener.Reset();
-        joinedCurrentStage = false;
-        automation.Reset();
-        Status = join ? "Waiting to join a Fête." : "Tracking Fêtes.";
+        ResetSessionState();
+        actions.ResetJoinStatus();
+        Status = string.Empty;
         return true;
     }
 
-    public void Stop(string reason = "Stopped")
+    public void Stop(string? reason = null)
     {
         IsArmed = false;
         autoJoin = false;
-        currentFateId = null;
-        currentStage = null;
-        lastCompletedStage = null;
-        routeDestination = null;
-        joinedCurrentStage = false;
-        sawFinalStage = false;
-        processingCycleRewards = false;
-        presentOpener.Reset();
-        automation.Reset();
+        ResetSessionState();
         navmesh.Stop();
-        Status = reason;
+        Status = reason ?? StatusText.Get("Stop_Default");
     }
 
     public void Tick()
@@ -88,25 +73,24 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
 
         if (!clientState.IsLoggedIn || clientState.TerritoryType != FeteCatalog.FirmamentTerritoryId)
         {
-            Stop("Stopped: left the Firmament or logged out.");
+            Stop(StatusText.Get("Stop_LeftFirmamentOrLoggedOut"));
             return;
         }
 
         if (!navmesh.IsReady())
         {
-            Stop("Stopped: vnavmesh became unavailable.");
+            Stop(StatusText.Get("Stop_NavmeshUnavailable"));
             return;
         }
 
         var job = objects.LocalPlayer?.ClassJob.RowId ?? 0;
         if (job is < 8 or > 18)
         {
-            Stop("Stopped: current job is not a crafter or gatherer.");
+            Stop(StatusText.Get("Stop_InvalidJob"));
             return;
         }
 
-        var visible = fates
-            .Select(f => (Fate: f, Stage: FeteCatalog.Find(f.FateId)))
+        var visible = FeteCatalog.WithDefinitions(fates)
             .Where(x => x.Stage != null &&
                         x.Fate.State is FateState.Preparing or FateState.Running or FateState.Ending)
             .OrderBy(x => Array.FindIndex(FeteCatalog.Stages, s => s.Stage == x.Stage!.Value.Stage))
@@ -125,8 +109,7 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
                 currentFateId = null;
                 joinedCurrentStage = false;
                 automation.Reset();
-                navmesh.Stop();
-                routeDestination = null;
+                StopRoute();
             }
 
             if (sawFinalStage)
@@ -145,8 +128,7 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
 
             if (presentOpener.IsActive && !presentOpener.Tick())
             {
-                if (navmesh.IsMoving()) navmesh.Stop();
-                routeDestination = null;
+                StopRoute();
                 Status = presentOpener.Status;
                 return;
             }
@@ -156,17 +138,14 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
                 processingCycleRewards = false;
                 if (Mode == RunMode.OneSequence)
                 {
-                    var reason = presentOpener.Status.Length > 0
-                        ? $"Sequence ended. {presentOpener.Status}"
-                        : "Sequence ended.";
-                    Stop(reason);
+                    Stop(presentOpener.Status.Length > 0 ? presentOpener.Status : null);
                     return;
                 }
             }
 
             if (!autoJoin)
             {
-                Status = "Waiting for the next Fête.";
+                Status = string.Empty;
                 return;
             }
 
@@ -174,18 +153,18 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
             if (preparing.Fate != null)
             {
                 var stage = preparing.Stage!.Value;
-                MoveToward(stage.Name, stage.Waypoint, StageApproachRadius, "preparing Fête");
+                MoveToward(stage.Name, stage.Waypoint, StageApproachRadius);
                 return;
             }
 
             if (lastCompletedStage is { } previous)
             {
                 var next = FeteCatalog.Find(FeteCatalog.Next(previous))!.Value;
-                MoveToward(next.Name, next.Waypoint, StageApproachRadius, "Fête location");
+                MoveToward(next.Name, next.Waypoint, StageApproachRadius);
                 return;
             }
 
-            Status = "Waiting for the next Fête location.";
+            Status = string.Empty;
             return;
         }
 
@@ -193,21 +172,11 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
             presentOpener.Reset();
 
         if (active.Fate.FateId != currentFateId)
-        {
-            if (navmesh.IsMoving()) navmesh.Stop();
-            routeDestination = null;
-            currentFateId = active.Fate.FateId;
-            currentStage = active.Stage!.Value.Stage;
-            lastCompletedStage = null;
-            joinedCurrentStage = false;
-            automation.Reset();
-            if (currentStage == FeteCatalog.Stages[^1].Stage)
-                sawFinalStage = true;
-        }
+            BeginStage(active.Fate.FateId, active.Stage!.Value.Stage);
 
         if (!autoJoin)
         {
-            Status = $"Tracking {active.Stage!.Value.Name} (FATE {currentFateId}).";
+            Status = string.Empty;
             return;
         }
 
@@ -216,17 +185,16 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
         {
             if (!joinedCurrentStage)
             {
-                if (navmesh.IsMoving()) navmesh.Stop();
-                routeDestination = null;
+                StopRoute();
                 joinedCurrentStage = true;
             }
-            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount) ?? Status;
+            RunStage(active.Fate.FateId, active.Fate.HandInCount);
             return;
         }
 
         if (!active.Stage!.Value.WaitForJoinConfirmation && joinedCurrentStage)
         {
-            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount) ?? Status;
+            RunStage(active.Fate.FateId, active.Fate.HandInCount);
             return;
         }
 
@@ -235,45 +203,75 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
         var joinWaypoint = active.Stage!.Value.Waypoint;
         if (Vector3.Distance(playerPosition, joinWaypoint) > Math.Max(2f, StageApproachRadius - 3f))
         {
-            MoveToward(active.Stage!.Value.Name, joinWaypoint, StageApproachRadius,
-                "join location");
+            MoveToward(active.Stage!.Value.Name, joinWaypoint, StageApproachRadius);
             return;
         }
 
-        if (navmesh.IsMoving()) navmesh.Stop();
+        StopRoute();
         actions.TryJoin(active.Fate.FateId, playerPosition, active.Fate.Position, active.Fate.Radius);
         if (!active.Stage!.Value.WaitForJoinConfirmation)
         {
             // Materials and toy interactions can begin without waiting for the
             // FATE participant status to appear after the join request.
             joinedCurrentStage = true;
-            Status = automation.Tick(active.Fate.FateId, active.Fate.HandInCount) ?? Status;
+            RunStage(active.Fate.FateId, active.Fate.HandInCount);
             return;
         }
-        Status = $"Joining the Fête: {actions.LastJoinAttempt} Waiting for game confirmation.";
+        Status = actions.LastJoinError ?? string.Empty;
     }
 
-    private void MoveToward(string name, Vector3 position, float radius, string source)
+    private void ResetSessionState()
+    {
+        currentFateId = null;
+        currentStage = null;
+        lastCompletedStage = null;
+        routeDestination = null;
+        joinedCurrentStage = false;
+        sawFinalStage = false;
+        processingCycleRewards = false;
+        presentOpener.Reset();
+        automation.Reset();
+    }
+
+    private void BeginStage(ushort fateId, FeteStage stage)
+    {
+        StopRoute();
+        currentFateId = fateId;
+        currentStage = stage;
+        lastCompletedStage = null;
+        joinedCurrentStage = false;
+        actions.ResetJoinStatus();
+        automation.Reset();
+        if (stage == FeteCatalog.Stages[^1].Stage)
+            sawFinalStage = true;
+    }
+
+    private void RunStage(ushort fateId, byte handInCount) =>
+        Status = automation.Tick(fateId, handInCount) ?? Status;
+
+    private void StopRoute()
+    {
+        if (navmesh.IsMoving()) navmesh.Stop();
+        routeDestination = null;
+    }
+
+    private void MoveToward(string name, Vector3 position, float radius)
     {
         if (!IsUsablePosition(position))
         {
-            Status = $"Waiting for {name} to reveal its location.";
+            Status = StatusText.Format("Error_WaypointUnavailable", name);
             return;
         }
 
         var distance = Math.Max(2f, radius - 3f);
         if (routeDestination is { } oldDestination &&
             Vector3.DistanceSquared(oldDestination, position) > 4f)
-        {
-            if (navmesh.IsMoving()) navmesh.Stop();
-            routeDestination = null;
-        }
+            StopRoute();
 
         if (Vector3.Distance(objects.LocalPlayer!.Position, position) <= distance)
         {
-            if (navmesh.IsMoving()) navmesh.Stop();
-            routeDestination = null;
-            Status = $"At {name}; waiting for it to run.";
+            StopRoute();
+            Status = string.Empty;
             return;
         }
 
@@ -281,13 +279,13 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
         {
             if (!navmesh.MoveNear(position, distance))
             {
-                Status = $"Could not path to {name} ({source}).";
+                Status = StatusText.Format("Error_PathUnavailable", name);
                 return;
             }
             routeDestination = position;
         }
 
-        Status = $"Moving to {name} ({source}).";
+        Status = StatusText.Format("Progress_MovingTo", name);
     }
 
     private static bool IsUsablePosition(Vector3 position) =>

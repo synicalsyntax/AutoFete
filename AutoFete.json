@@ -2,6 +2,6 @@
   "Name": "AutoFete",
   "Author": "syn",
   "Punchline": "Hands-free fête completion!",
-  "Description": "Automates fête completion in the Firmament.",
+  "Description": "Automates fête completion in the Firmament. Requires vnavmesh and TextAdvance.",
   "Tags": ["fetes", "firmament", "fates"]
 }

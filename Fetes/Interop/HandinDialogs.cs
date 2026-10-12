@@ -19,6 +19,8 @@ internal sealed class HandinDialogs : IDisposable
             "TextAdvance.DisableExternalControl");
     }
 
+    public bool IsAvailable => enable.HasFunction && disable.HasFunction;
+
     public void Tick(bool active)
     {
         if (!active)
@@ -57,14 +59,8 @@ internal sealed class HandinDialogs : IDisposable
 
     public sealed class ExternalTerritoryConfig
     {
-        public bool? EnableQuestAccept;
-        public bool? EnableQuestComplete;
-        public bool? EnableRewardPick;
         public bool? EnableRequestHandin;
-        public bool? EnableCutsceneEsc;
-        public bool? EnableCutsceneSkipConfirm;
         public bool? EnableTalkSkip;
         public bool? EnableRequestFill;
-        public bool? EnableAutoInteract;
     }
 }

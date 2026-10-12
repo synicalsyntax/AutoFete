@@ -5,7 +5,8 @@ using System.Numerics;
 namespace AutoFete;
 
 internal sealed class FeteController(IClientState clientState, IObjectTable objects, IFateTable fates,
-    Navmesh navmesh, GameActions actions, FeteActionAutomation automation, Configuration config)
+    Navmesh navmesh, GameActions actions, FeteActionAutomation automation,
+    HandinDialogs handinDialogs, Configuration config)
 {
     private const float StageApproachRadius = 6f;
     private readonly FetePresentOpener presentOpener = new(actions);
@@ -52,6 +53,12 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
             return false;
         }
 
+        if (!handinDialogs.IsAvailable)
+        {
+            Status = StatusText.Get("Error_TextAdvanceUnavailable");
+            return false;
+        }
+
         Mode = mode;
         autoJoin = join;
         IsArmed = true;
@@ -84,6 +91,12 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
         if (!navmesh.IsReady())
         {
             Stop(StatusText.Get("Stop_NavmeshUnavailable"));
+            return;
+        }
+
+        if (!handinDialogs.IsAvailable)
+        {
+            Stop(StatusText.Get("Stop_TextAdvanceUnavailable"));
             return;
         }
 

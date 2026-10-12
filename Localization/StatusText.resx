@@ -25,6 +25,9 @@
   <data name="Error_NavmeshUnavailable" xml:space="preserve">
     <value>ERROR: vnavmesh is unavailable</value>
   </data>
+  <data name="Error_TextAdvanceUnavailable" xml:space="preserve">
+    <value>ERROR: TextAdvance is unavailable</value>
+  </data>
   <data name="Error_WaypointUnavailable" xml:space="preserve">
     <value>ERROR: No waypoint for {0}</value>
   </data>
@@ -71,6 +74,9 @@
   </data>
   <data name="Stop_NavmeshUnavailable" xml:space="preserve">
     <value>STOPPED: vnavmesh became unavailable</value>
+  </data>
+  <data name="Stop_TextAdvanceUnavailable" xml:space="preserve">
+    <value>STOPPED: TextAdvance became unavailable</value>
   </data>
   <data name="Stop_InvalidJob" xml:space="preserve">
     <value>STOPPED: Current job is not a crafter or gatherer</value>

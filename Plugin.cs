@@ -65,7 +65,8 @@ public sealed class Plugin : IDalamudPlugin
         actions = new GameActions(targets, objects, condition);
         automation = new FeteActionAutomation(actions, navmesh, objects);
         handinDialogs = new HandinDialogs(pluginInterface);
-        controller = new FeteController(clientState, objects, fates, navmesh, actions, automation, config);
+        controller = new FeteController(clientState, objects, fates, navmesh, actions,
+            automation, handinDialogs, config);
         controller.StageCompleted += OnStageCompleted;
         recorder = new CaptureRecorder(clientState, objects, fates, targets, controller, actions);
         window = new RunnerWindow(controller, recorder, config, ActiveStageLabel,

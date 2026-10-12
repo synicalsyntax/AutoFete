@@ -9,7 +9,7 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
 {
     public const ushort FateId = 1713;
     public const string Name = "Made of Softer Stuff";
-    public const int GoldCount = 3;
+    public const int MinPointCount = 3;
     public static readonly Vector3 Waypoint = new(36.96617f, -19.90003f, 87.32608f);
     public static readonly IReadOnlyDictionary<string, TargetHint[]> Targets =
         new Dictionary<string, TargetHint[]>
@@ -19,7 +19,7 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
             ["wain"] = [TargetHint.Interactable(2011525, "wain")],
         };
     public static readonly FeteDefinition Definition = new(
-        FeteStage.SofterStuff, FateId, Name, GoldCount, Waypoint, Targets,
+        FeteStage.SofterStuff, FateId, Name, MinPointCount, Waypoint, Targets,
         WaitForJoinConfirmation: false, UsesHandinDialogs: true);
 
     private bool wasCarryingToy;
@@ -40,7 +40,7 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
         waitingForPickupUntilUtc = DateTime.MinValue;
     }
 
-    public override string Tick(byte handInCount)
+    public override string Tick(byte handInCount, bool continueAfterFullCredit)
     {
         var carryingToy = actions.IsCarryingToy;
         if (wasCarryingToy && !carryingToy && toyDeliveryPending)
@@ -52,7 +52,7 @@ internal sealed class SofterStuffFete(GameActions actions, Navmesh navmesh, IObj
             toyDeliveryPending = false;
         wasCarryingToy = carryingToy;
 
-        if (completedToyHandins >= GoldCount)
+        if (ShouldComplete(completedToyHandins, continueAfterFullCredit))
             return CompleteStage(completedToyHandins);
 
         if (carryingToy)

@@ -9,7 +9,7 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
 {
     public const ushort FateId = 1714;
     public const string Name = "Shear-a-Yak";
-    public const int GoldCount = 4;
+    public const int MinPointCount = 4;
     private const int FleecePerHandin = 3;
     public const uint AetheromaticClipperActionId = 24280;
     public const uint YakFleeceEventItemId = 2003081;
@@ -24,7 +24,7 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
     private static readonly FeteAction ClipperAction =
         new(AetheromaticClipperActionId, "Aetheromatic Clipper", FeteStage.ShearYak, "wooly-yak");
     public static readonly FeteDefinition Definition = new(
-        FeteStage.ShearYak, FateId, Name, GoldCount, Waypoint, Targets,
+        FeteStage.ShearYak, FateId, Name, MinPointCount, Waypoint, Targets,
         WaitForJoinConfirmation: true, UsesHandinDialogs: true);
 
     private DateTime nextClipperUtc;
@@ -44,7 +44,7 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
         fleeceName = null;
     }
 
-    public override string? Tick(byte handInCount)
+    public override string? Tick(byte handInCount, bool continueAfterFullCredit)
     {
         var fleeceCount = GameActions.GetKeyItemCount(YakFleeceEventItemId);
         if (fleeceCount < 0)
@@ -57,7 +57,7 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
         previousFleeceCount = fleeceCount;
 
         completedYakHandins = Math.Max(completedYakHandins, handInCount);
-        if (completedYakHandins >= GoldCount)
+        if (ShouldComplete(completedYakHandins, continueAfterFullCredit))
             return CompleteStage(completedYakHandins);
 
         if (fleeceCount >= FleecePerHandin)

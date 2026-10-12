@@ -26,7 +26,14 @@ internal abstract class FeteStageHandler(FeteDefinition definition, GameActions 
     }
 
     protected abstract void ResetStage();
-    public abstract string? Tick(byte handInCount);
+    public abstract string? Tick(byte handInCount, bool continueAfterFullCredit);
+
+    protected bool ShouldComplete(int earned, bool continueAfterFullCredit)
+    {
+        if (continueAfterFullCredit)
+            IsComplete = false;
+        return !continueAfterFullCredit && earned >= definition.MinPointCount;
+    }
 
     protected string CompleteStage(int earned)
     {

@@ -9,7 +9,7 @@ internal sealed class PresentsFete(GameActions actions, Navmesh navmesh, IObject
 {
     public const ushort FateId = 1716;
     public const string Name = "Presents of Mind";
-    public const int GoldCount = 6;
+    public const int MinPointCount = 6;
     public static readonly Vector3 Waypoint = new(50.036926f, -19.95f, 37.29581f);
     public static readonly IReadOnlyDictionary<string, TargetHint[]> Targets =
         new Dictionary<string, TargetHint[]>
@@ -25,7 +25,7 @@ internal sealed class PresentsFete(GameActions actions, Navmesh navmesh, IObject
             ["dzemael-stonemason"] = [TargetHint.Npc(10087, "House Dzemael stonemason")],
         };
     public static readonly FeteDefinition Definition = new(
-        FeteStage.Presents, FateId, Name, GoldCount, Waypoint, Targets,
+        FeteStage.Presents, FateId, Name, MinPointCount, Waypoint, Targets,
         WaitForJoinConfirmation: true, UsesHandinDialogs: true);
 
     private sealed record PresentRoute(string SourceRole, Vector3 SourcePosition,
@@ -64,7 +64,7 @@ internal sealed class PresentsFete(GameActions actions, Navmesh navmesh, IObject
         previousPresentsHandinCount = -1;
     }
 
-    public override string Tick(byte handInCount)
+    public override string Tick(byte handInCount, bool continueAfterFullCredit)
     {
         if (previousPresentsHandinCount >= 0 && handInCount > previousPresentsHandinCount)
         {
@@ -77,7 +77,7 @@ internal sealed class PresentsFete(GameActions actions, Navmesh navmesh, IObject
         }
         previousPresentsHandinCount = handInCount;
 
-        if (handInCount >= GoldCount)
+        if (ShouldComplete(handInCount, continueAfterFullCredit))
             return CompleteStage(handInCount);
 
         var carryingPresent = actions.CarryingObject ||

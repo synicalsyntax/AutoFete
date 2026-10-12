@@ -6,7 +6,7 @@ internal readonly record struct FeteDefinition(
     FeteStage Stage,
     ushort FateId,
     string Name,
-    int GoldCount,
+    int MinPointCount,
     Vector3 Waypoint,
     IReadOnlyDictionary<string, TargetHint[]> Targets,
     bool WaitForJoinConfirmation,

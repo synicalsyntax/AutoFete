@@ -24,9 +24,16 @@ internal sealed class SettingsWindow(Configuration config, CaptureRecorder recor
         ImGui.Separator();
 
         var openPresents = config.OpenFetePresents;
-        if (ImGui.Checkbox("Automatically open fete presents in inventory", ref openPresents))
+        if (ImGui.Checkbox("Automatically open Fête presents in inventory", ref openPresents))
         {
             config.OpenFetePresents = openPresents;
+            saveConfig();
+        }
+
+        var continueActions = config.ContinueFeteActionsAfterFullCredit;
+        if (ImGui.Checkbox("Continue Fête actions after earning full credit", ref continueActions))
+        {
+            config.ContinueFeteActionsAfterFullCredit = continueActions;
             saveConfig();
         }
 

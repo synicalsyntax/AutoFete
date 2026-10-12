@@ -19,12 +19,12 @@ internal sealed class FeteActionAutomation(GameActions actions, Navmesh navmesh,
         FeteCatalog.Find(fateId) is { } definition &&
         handlers.TryGetValue(definition.Stage, out var handler) && handler.IsComplete;
 
-    public string? Tick(ushort fateId, byte handInCount)
+    public string? Tick(ushort fateId, byte handInCount, bool continueAfterFullCredit)
     {
         var definition = FeteCatalog.Find(fateId);
         return definition is { } stage &&
                handlers.TryGetValue(stage.Stage, out var handler)
-                   ? handler.Tick(handInCount)
+                   ? handler.Tick(handInCount, continueAfterFullCredit)
                    : StatusText.Format("Error_NoStageAutomation", definition?.Name);
     }
 }

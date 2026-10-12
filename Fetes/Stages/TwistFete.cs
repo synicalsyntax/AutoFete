@@ -9,7 +9,7 @@ internal sealed class TwistFete(GameActions actions, Navmesh navmesh, IObjectTab
 {
     public const ushort FateId = 1712;
     public const string Name = "A Twist of Fête";
-    public const int GoldCount = 6;
+    public const int MinPointCount = 6;
     public const uint MightyMaximizerActionId = 24277;
     public const uint ChirpyCheckerActionId = 24278;
     public const uint PerkyPeelerActionId = 24279;
@@ -28,7 +28,7 @@ internal sealed class TwistFete(GameActions actions, Navmesh navmesh, IObjectTab
         new(PerkyPeelerActionId, "Perky Peeler", FeteStage.Twist, "perky-piggy"),
     ];
     public static readonly FeteDefinition Definition = new(
-        FeteStage.Twist, FateId, Name, GoldCount, Waypoint, Targets,
+        FeteStage.Twist, FateId, Name, MinPointCount, Waypoint, Targets,
         WaitForJoinConfirmation: true, UsesHandinDialogs: false);
 
     private readonly HashSet<string> handledTwistTargets = [];
@@ -38,9 +38,9 @@ internal sealed class TwistFete(GameActions actions, Navmesh navmesh, IObjectTab
         handledTwistTargets.Clear();
     }
 
-    public override string Tick(byte handInCount)
+    public override string Tick(byte handInCount, bool continueAfterFullCredit)
     {
-        if (handInCount >= GoldCount)
+        if (ShouldComplete(handInCount, continueAfterFullCredit))
             return CompleteStage(handInCount);
 
         // During each turn, the active mascot becomes targetable. Its EmoteId

@@ -9,7 +9,7 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
 {
     public const ushort FateId = 1715;
     public const string Name = "Toy Hunter";
-    public const int GoldCount = 4;
+    public const int MinPointCount = 4;
     public const uint LuckyToyEventItemId = 2003082;
     public static readonly Vector3 Waypoint = new(-76.354965f, 0f, -0.04517188f);
     public static readonly IReadOnlyDictionary<string, TargetHint[]> Targets =
@@ -19,7 +19,7 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
             ["perky-piggy"] = [TargetHint.PerkyPiggy],
         };
     public static readonly FeteDefinition Definition = new(
-        FeteStage.ToyHunter, FateId, Name, GoldCount, Waypoint, Targets,
+        FeteStage.ToyHunter, FateId, Name, MinPointCount, Waypoint, Targets,
         WaitForJoinConfirmation: true, UsesHandinDialogs: true);
 
     private DateTime waitingForBoxResultUntilUtc;
@@ -41,7 +41,7 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
         boxRouteDestination = null;
     }
 
-    public override string Tick(byte handInCount)
+    public override string Tick(byte handInCount, bool continueAfterFullCredit)
     {
         var toyCount = GameActions.GetKeyItemCount(LuckyToyEventItemId);
         if (toyCount < 0)
@@ -55,7 +55,7 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
         }
         previousToyHunterHandinCount = handInCount;
 
-        if (handInCount >= GoldCount)
+        if (ShouldComplete(handInCount, continueAfterFullCredit))
             return CompleteStage(handInCount);
 
         var collectingStatus = StatusText.Format("Progress_Collecting", StatusText.Get("Target_LuckyToy"));

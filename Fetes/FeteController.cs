@@ -270,7 +270,7 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
     private void RunStage(ushort fateId, byte handInCount)
     {
         var wasComplete = automation.IsComplete(fateId);
-        Status = automation.Tick(fateId, handInCount) ?? Status;
+        Status = automation.Tick(fateId, handInCount, config.ContinueFeteActionsAfterFullCredit) ?? Status;
         if (!wasComplete && automation.IsComplete(fateId))
             StageCompleted?.Invoke(Status);
     }

@@ -4,7 +4,7 @@ Dalamud plugin for automating [Fêtes in the Firmament](https://ffxiv.consolegam
 
 ## Requirements
 
-Install and enable **vnavmesh** and **TextAdvance** before using AutoFete.
+Install and enable **[vnavmesh](https://github.com/awgil/ffxiv_navmesh)** and **[TextAdvance](https://github.com/NightmareXIV/TextAdvance)** before using AutoFete.
 AutoFete uses vnavmesh for movement and TextAdvance for Fête hand-in dialogs.
 Without TextAdvance, stages that require hand-ins cannot complete automatically.
 

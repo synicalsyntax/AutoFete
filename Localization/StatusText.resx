@@ -1,0 +1,173 @@
+<?xml version='1.0' encoding='utf-8'?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <!-- Errors -->
+  <data name="Error_UnidentifiedPresent" xml:space="preserve">
+    <value>ERROR: Unknown present; deliver it manually</value>
+  </data>
+  <data name="Error_EnterFirmament" xml:space="preserve">
+    <value>ERROR: Enter the Firmament first</value>
+  </data>
+  <data name="Error_ChangeToCrafterOrGatherer" xml:space="preserve">
+    <value>ERROR: Switch to a crafter or gatherer</value>
+  </data>
+  <data name="Error_NavmeshUnavailable" xml:space="preserve">
+    <value>ERROR: vnavmesh is unavailable</value>
+  </data>
+  <data name="Error_WaypointUnavailable" xml:space="preserve">
+    <value>ERROR: No waypoint for {0}</value>
+  </data>
+  <data name="Error_PathUnavailable" xml:space="preserve">
+    <value>ERROR: Cannot reach {0}</value>
+  </data>
+  <data name="Error_PresentsRemain" xml:space="preserve">
+    <value>ERROR: Could not open {0} Fête presents</value>
+  </data>
+  <data name="Error_InventoryFull" xml:space="preserve">
+    <value>ERROR: Inventory full; {0} presents remain</value>
+  </data>
+  <data name="Error_InventoryUnavailable" xml:space="preserve">
+    <value>ERROR: Could not open presents; inventory unavailable</value>
+  </data>
+  <data name="Error_NoStageAutomation" xml:space="preserve">
+    <value>ERROR: No automation for {0}</value>
+  </data>
+  <data name="Error_JoinFailed" xml:space="preserve">
+    <value>ERROR: Could not join Fête</value>
+  </data>
+  <data name="Error_ActionUnavailable" xml:space="preserve">
+    <value>ERROR: Action unavailable</value>
+  </data>
+  <data name="Error_TooFarFromTarget" xml:space="preserve">
+    <value>ERROR: Too far from {0}</value>
+  </data>
+  <data name="Error_ActionRejected" xml:space="preserve">
+    <value>ERROR: {0} failed on {1}</value>
+  </data>
+  <data name="Error_CannotFindTarget" xml:space="preserve">
+    <value>ERROR: Cannot find {0}</value>
+  </data>
+
+  <!-- Stop reasons -->
+  <data name="Stop_Default" xml:space="preserve">
+    <value>Stopped</value>
+  </data>
+  <data name="Stop_LeftFirmamentOrLoggedOut" xml:space="preserve">
+    <value>STOPPED: Left the Firmament or logged out</value>
+  </data>
+  <data name="Stop_NavmeshUnavailable" xml:space="preserve">
+    <value>STOPPED: vnavmesh became unavailable</value>
+  </data>
+  <data name="Stop_InvalidJob" xml:space="preserve">
+    <value>STOPPED: Current job is not a crafter or gatherer</value>
+  </data>
+  <data name="Stop_PluginUnloaded" xml:space="preserve">
+    <value>STOPPED: Plugin unloaded</value>
+  </data>
+  <data name="Stop_UnexpectedError" xml:space="preserve">
+    <value>STOPPED: Unexpected error; see /xllog</value>
+  </data>
+
+  <!-- Progress -->
+  <data name="Progress_PickingUp" xml:space="preserve">
+    <value>Picking up {0}</value>
+  </data>
+  <data name="Progress_OpeningPresentBox" xml:space="preserve">
+    <value>Opening a present box</value>
+  </data>
+  <data name="Progress_MovingTo" xml:space="preserve">
+    <value>Moving to {0}</value>
+  </data>
+  <data name="Progress_WaitingForRewards" xml:space="preserve">
+    <value>Waiting for Fête rewards</value>
+  </data>
+  <data name="Progress_OpeningPresents" xml:space="preserve">
+    <value>Opening Fête presents</value>
+  </data>
+  <data name="Progress_CollectingYakFleece" xml:space="preserve">
+    <value>Collecting yak fleece</value>
+  </data>
+  <data name="Progress_DeliveringTo" xml:space="preserve">
+    <value>Delivering to {0}</value>
+  </data>
+
+  <!-- Results -->
+  <data name="Result_PresentsOpened" xml:space="preserve">
+    <value>Opened {0} Fête presents</value>
+  </data>
+  <data name="Result_AutomationStarted" xml:space="preserve">
+    <value>Fête automation started</value>
+  </data>
+
+  <!-- UI labels -->
+  <data name="Ui_Active" xml:space="preserve">
+    <value>Active</value>
+  </data>
+  <data name="Ui_Inactive" xml:space="preserve">
+    <value>Inactive</value>
+  </data>
+  <data name="Ui_StageLabel" xml:space="preserve">
+    <value>Stage:</value>
+  </data>
+  <data name="Ui_NoStage" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="Ui_WaitingForFete" xml:space="preserve">
+    <value>Waiting for a Fête to appear</value>
+  </data>
+  <data name="Ui_StageEnding" xml:space="preserve">
+    <value>{0} (ending)</value>
+  </data>
+  <data name="Ui_StagePreparing" xml:space="preserve">
+    <value>{0} (preparing)</value>
+  </data>
+
+  <!-- Target names -->
+  <data name="Target_ChildrenPresent" xml:space="preserve">
+    <value>children's present</value>
+  </data>
+  <data name="Target_ArtisanPresent" xml:space="preserve">
+    <value>artisan's present</value>
+  </data>
+  <data name="Target_MerchantPresent" xml:space="preserve">
+    <value>merchant's present</value>
+  </data>
+  <data name="Target_MightyMoogle" xml:space="preserve">
+    <value>Mighty Moogle</value>
+  </data>
+  <data name="Target_ChirpyChocobo" xml:space="preserve">
+    <value>Chirpy Chocobo</value>
+  </data>
+  <data name="Target_PerkyPiggy" xml:space="preserve">
+    <value>Perky Piggy</value>
+  </data>
+  <data name="Target_WoolyYak" xml:space="preserve">
+    <value>Wooly Yak</value>
+  </data>
+  <data name="Target_PresentBox" xml:space="preserve">
+    <value>a present box</value>
+  </data>
+  <data name="Target_StuffedToyMaterials" xml:space="preserve">
+    <value>stuffed toy materials</value>
+  </data>
+  <data name="Target_Wain" xml:space="preserve">
+    <value>a wain</value>
+  </data>
+  <data name="Target_RecipientForPresent" xml:space="preserve">
+    <value>a recipient for {0}</value>
+  </data>
+  <data name="Target_PresentSource" xml:space="preserve">
+    <value>a present source</value>
+  </data>
+</root>

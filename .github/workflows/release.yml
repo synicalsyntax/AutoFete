@@ -3,7 +3,6 @@ name: Build and release AutoFete
 on:
   push:
     branches: [master, main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -37,7 +36,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/master'
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -54,23 +53,61 @@ jobs:
         with:
           name: AutoFete-package
           path: dist
+      - name: Validate package version
+        run: |
+          release_tag="v$(python3 -c 'from xml.etree import ElementTree; print(ElementTree.parse("AutoFete.csproj").findtext("./PropertyGroup/Version"))')"
+          python3 tools/make_repo.py \
+            --zip dist/latest.zip \
+            --source-url "https://github.com/$GITHUB_REPOSITORY" \
+            --download-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$release_tag/latest.zip" \
+            --release-tag "$release_tag" \
+            --output "$RUNNER_TEMP/repo.json"
+      - name: Resolve versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_tag="v$(python3 -c 'from xml.etree import ElementTree; print(ElementTree.parse("AutoFete.csproj").findtext("./PropertyGroup/Version"))')"
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            if gh release view "$release_tag" --json assets --jq '.assets[].name' | grep -Fxq latest.zip; then
+              gh release download "$release_tag" --pattern latest.zip --dir dist --clobber
+            else
+              gh release upload "$release_tag" dist/latest.zip
+            fi
+          else
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$release_tag" >/dev/null 2>&1; then
+              git fetch --no-tags origin "refs/tags/$release_tag:refs/tags/$release_tag"
+              if [[ "$(git rev-list -n 1 "$release_tag")" != "$GITHUB_SHA" ]]; then
+                echo "Tag $release_tag points to a different commit; bump the project version." >&2
+                exit 1
+              fi
+              gh release create "$release_tag" dist/latest.zip --verify-tag --title "AutoFete $release_tag" --generate-notes
+            else
+              gh release create "$release_tag" dist/latest.zip --target "$GITHUB_SHA" --title "AutoFete $release_tag" --generate-notes
+            fi
+          fi
+          if [[ "$(gh release view "$release_tag" --json isDraft --jq .isDraft)" == "true" ]]; then
+            gh release edit "$release_tag" --target "$GITHUB_SHA" --draft=false
+          fi
+      - name: Verify public release asset
+        run: |
+          asset_url="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/latest.zip"
+          for attempt in {1..6}; do
+            if curl --fail --location --silent --head "$asset_url?run=$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Release asset is not publicly available: $asset_url" >&2
+          exit 1
       - name: Generate and validate repository index
         run: |
           python3 tools/make_repo.py \
             --zip dist/latest.zip \
             --source-url "https://github.com/$GITHUB_REPOSITORY" \
-            --download-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/latest.zip" \
-            --release-tag "$GITHUB_REF_NAME" \
+            --download-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/latest.zip" \
+            --release-tag "$RELEASE_TAG" \
             --output site/repo.json
-      - name: Publish GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/latest.zip --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" dist/latest.zip --verify-tag --title "AutoFete $GITHUB_REF_NAME" --generate-notes
-          fi
       - uses: actions/upload-pages-artifact@v4
         with:
           path: site

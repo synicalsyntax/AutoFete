@@ -15,3 +15,8 @@ which includes `AutoFete.dll` and its generated `AutoFete.json` manifest. The
 source `AutoFete.json` is the manifest template; the packager supplies the
 internal name, assembly version, and Dalamud API level in the ZIP.
 
+## License
+
+Copyright (c) 2026 synicalsyntax.
+
+AutoFete is licensed under the [MIT License](LICENSE).

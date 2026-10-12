@@ -47,7 +47,7 @@
     <value>ERROR: No automation for {0}</value>
   </data>
   <data name="Error_JoinFailed" xml:space="preserve">
-    <value>ERROR: Could not join Fête</value>
+    <value>ERROR: Could not join the Fête</value>
   </data>
   <data name="Error_ActionUnavailable" xml:space="preserve">
     <value>ERROR: Action unavailable</value>

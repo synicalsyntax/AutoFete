@@ -109,7 +109,7 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception e)
         {
             log.Error(e, "Could not save AutoFete settings");
-            chat.PrintError("ERROR: Could not save settings. See /xllog.", "AutoFete");
+            chat.PrintError("ERROR: Could not save settings; see /xllog", "AutoFete");
         }
     }
 
@@ -200,7 +200,7 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         recorder.Start();
-        chat.Print("Capture started.", "AutoFete");
+        chat.Print("Capture started", "AutoFete");
     }
 
     private void StopRecording()
@@ -213,7 +213,7 @@ public sealed class Plugin : IDalamudPlugin
         catch (Exception e)
         {
             log.Error(e, "Could not save Fête capture");
-            chat.PrintError("ERROR: Could not save capture. See /xllog.", "AutoFete");
+            chat.PrintError("ERROR: Could not save capture; see /xllog", "AutoFete");
         }
     }
 }

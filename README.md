@@ -1,11 +1,11 @@
 # AutoFete
 
-Dalamud plugin for the automating completion of [fêtes in the Firmament](https://ffxiv.consolegameswiki.com/wiki/F%C3%AAtes).
+Dalamud plugin for automating [Fêtes in the Firmament](https://ffxiv.consolegameswiki.com/wiki/F%C3%AAtes).
 
 ## Requirements
 
 Install and enable **vnavmesh** and **TextAdvance** before using AutoFete.
-AutoFete uses vnavmesh for movement and TextAdvance for fête hand-in dialogs.
+AutoFete uses vnavmesh for movement and TextAdvance for Fête hand-in dialogs.
 Without TextAdvance, stages that require hand-ins cannot complete automatically.
 
 ## Build a release

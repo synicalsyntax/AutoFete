@@ -41,10 +41,7 @@ internal sealed class TwistFete(GameActions actions, Navmesh navmesh, IObjectTab
     public override string Tick(byte handInCount)
     {
         if (handInCount >= GoldCount)
-        {
-            if (navmesh.IsMoving()) navmesh.Stop();
-            return string.Empty;
-        }
+            return CompleteStage(handInCount);
 
         // During each turn, the active mascot becomes targetable. Its EmoteId
         // stays zero, so targetability is the reliable signal for the action.
@@ -68,12 +65,14 @@ internal sealed class TwistFete(GameActions actions, Navmesh navmesh, IObjectTab
         if (player != null && Vector3.Distance(player.Position, target.Position) > 20f)
         {
             if (!navmesh.IsMoving()) navmesh.MoveNear(target.Position, 15f);
-            return string.Empty;
+            return StatusText.Format("Progress_MovingTo", target.Name);
         }
 
         if (navmesh.IsMoving()) navmesh.Stop();
         if (actions.TryUseFeteAction(FateId, activeAction.Value, target, out var result))
             handledTwistTargets.Add(activeAction.Value.TargetRole);
-        return result;
+        return result.Length > 0
+            ? result
+            : StatusText.Format("Progress_PerformingEmoteFor", target.Name);
     }
 }

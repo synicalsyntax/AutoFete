@@ -15,8 +15,11 @@ internal abstract class FeteStageHandler(FeteDefinition definition, GameActions 
     private string? missingTargetRole;
     private DateTime missingTargetSinceUtc;
 
+    public bool IsComplete { get; private set; }
+
     public void Reset()
     {
+        IsComplete = false;
         ClearMissingTarget();
         nextInteractionUtc.Clear();
         ResetStage();
@@ -25,12 +28,29 @@ internal abstract class FeteStageHandler(FeteDefinition definition, GameActions 
     protected abstract void ResetStage();
     public abstract string? Tick(byte handInCount);
 
+    protected string CompleteStage(int earned)
+    {
+        IsComplete = true;
+        if (navmesh.IsMoving()) navmesh.Stop();
+        return StatusText.Format("Result_StageAutomationComplete", earned);
+    }
+
     protected IGameObject? FindTarget(string role)
     {
         var target = actions.FindTarget(definition, role);
         if (target != null)
             ClearMissingTarget();
         return target;
+    }
+
+    protected string TargetName(string role)
+    {
+        var visible = objects.FirstOrDefault(x => Matches(role, x));
+        if (visible != null)
+            return visible.Name.ToString();
+        return definition.Targets.TryGetValue(role, out var hints) && hints.Length > 0
+            ? hints[0].Name
+            : role;
     }
 
     protected string MissingTarget(string role, string name)

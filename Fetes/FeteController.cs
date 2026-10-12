@@ -18,10 +18,14 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
     private bool autoJoin;
     private bool joinedCurrentStage;
 
+    public event Action<string>? StageCompleted;
+
     public bool IsArmed { get; private set; }
     public string Status { get; private set; } = StatusText.Get("Stop_Default");
     public RunMode Mode { get; private set; }
     public FeteStage? CurrentStage => currentStage;
+    public bool IsAutomatingStage => IsArmed && autoJoin && currentFateId is { } id &&
+                                     !automation.IsComplete(id);
     public bool WantsHandinDialogs => autoJoin && currentFateId is { } id &&
                                        FeteCatalog.Find(id) is { } stage &&
                                        stage.UsesHandinDialogs &&
@@ -138,7 +142,11 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
                 processingCycleRewards = false;
                 if (Mode == RunMode.OneSequence)
                 {
-                    Stop(presentOpener.Status.Length > 0 ? presentOpener.Status : null);
+                    var lastStatus = presentOpener.Status.Length > 0 ? presentOpener.Status : Status;
+                    var stopped = StatusText.Get("Stop_SingleCycleComplete");
+                    Stop(string.IsNullOrWhiteSpace(lastStatus)
+                        ? stopped
+                        : $"{lastStatus}\n{stopped}");
                     return;
                 }
             }
@@ -246,8 +254,13 @@ internal sealed class FeteController(IClientState clientState, IObjectTable obje
             sawFinalStage = true;
     }
 
-    private void RunStage(ushort fateId, byte handInCount) =>
+    private void RunStage(ushort fateId, byte handInCount)
+    {
+        var wasComplete = automation.IsComplete(fateId);
         Status = automation.Tick(fateId, handInCount) ?? Status;
+        if (!wasComplete && automation.IsComplete(fateId))
+            StageCompleted?.Invoke(Status);
+    }
 
     private void StopRoute()
     {

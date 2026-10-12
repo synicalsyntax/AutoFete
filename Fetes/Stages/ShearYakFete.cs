@@ -10,6 +10,7 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
     public const ushort FateId = 1714;
     public const string Name = "Shear-a-Yak";
     public const int GoldCount = 4;
+    private const int FleecePerHandin = 3;
     public const uint AetheromaticClipperActionId = 24280;
     public const uint YakFleeceEventItemId = 2003081;
     public static readonly Vector3 Waypoint = new(10.060686f, 0.29999006f, -145.31203f);
@@ -28,15 +29,19 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
 
     private DateTime nextClipperUtc;
     private DateTime yakInRangeSinceUtc;
+    private DateTime showFullFleeceUntilUtc;
     private int completedYakHandins;
     private int previousFleeceCount = -1;
+    private string? fleeceName;
 
     protected override void ResetStage()
     {
         nextClipperUtc = DateTime.MinValue;
         yakInRangeSinceUtc = DateTime.MinValue;
+        showFullFleeceUntilUtc = DateTime.MinValue;
         completedYakHandins = 0;
         previousFleeceCount = -1;
+        fleeceName = null;
     }
 
     public override string? Tick(byte handInCount)
@@ -45,71 +50,86 @@ internal sealed class ShearYakFete(GameActions actions, Navmesh navmesh, IObject
         if (fleeceCount < 0)
             return string.Empty;
 
-        if (previousFleeceCount >= 3 && fleeceCount == 0)
+        if (fleeceCount >= FleecePerHandin && previousFleeceCount < FleecePerHandin)
+            showFullFleeceUntilUtc = DateTime.UtcNow.AddSeconds(1);
+        if (previousFleeceCount >= FleecePerHandin && fleeceCount == 0)
             completedYakHandins++;
         previousFleeceCount = fleeceCount;
 
         completedYakHandins = Math.Max(completedYakHandins, handInCount);
         if (completedYakHandins >= GoldCount)
-        {
-            if (navmesh.IsMoving()) navmesh.Stop();
-            return string.Empty;
-        }
+            return CompleteStage(completedYakHandins);
 
-        if (fleeceCount >= 3)
+        if (fleeceCount >= FleecePerHandin)
         {
+            var fullFleeceStatus = StatusText.Format("Progress_CollectingWithCount",
+                FleeceName, fleeceCount, FleecePerHandin);
             var chocobo = FindTarget("chirpy-chocobo");
             if (chocobo == null)
             {
                 actions.ClearTarget();
-                return MissingTarget("chirpy-chocobo", StatusText.Get("Target_ChirpyChocobo"));
+                var missingTarget = MissingTarget("chirpy-chocobo", TargetName("chirpy-chocobo"));
+                return missingTarget.Length > 0 ? missingTarget : fullFleeceStatus;
             }
+            var deliveryStatus = StatusText.Format("Progress_DeliveringItemTo",
+                FleeceName, chocobo.Name);
+            var status = DateTime.UtcNow < showFullFleeceUntilUtc
+                ? fullFleeceStatus
+                : deliveryStatus;
             if (MoveWithin(chocobo.Position, 3f))
             {
                 actions.ClearTarget();
-                return StatusText.Format("Progress_DeliveringTo", chocobo.Name);
+                return status;
             }
             actions.SelectTarget(chocobo);
             TryInteract("chirpy-chocobo", chocobo);
-            return StatusText.Format("Progress_DeliveringTo", chocobo.Name);
+            return status;
         }
 
         var fleece = FindTarget("yak-fleece");
         if (fleece != null)
+            fleeceName = fleece.Name.ToString();
+        var collectingStatus = StatusText.Format("Progress_CollectingWithCount",
+            FleeceName, fleeceCount, FleecePerHandin);
+        if (fleece != null)
         {
             if (MoveWithin(fleece.Position, 3f))
-                return string.Empty;
+                return collectingStatus;
             TryInteract("yak-fleece", fleece);
-            return StatusText.Get("Progress_CollectingYakFleece");
+            return collectingStatus;
         }
 
         if (DateTime.UtcNow < nextClipperUtc)
-            return string.Empty;
+            return collectingStatus;
 
         var yak = FindTarget("wooly-yak");
         if (yak == null)
         {
             yakInRangeSinceUtc = DateTime.MinValue;
-            return MissingTarget("wooly-yak", StatusText.Get("Target_WoolyYak"));
+            var missingTarget = MissingTarget("wooly-yak", TargetName("wooly-yak"));
+            return missingTarget.Length > 0 ? missingTarget : collectingStatus;
         }
+        var shearingStatus = StatusText.Format("Progress_ShearingYak", yak.Name);
         if (MoveWithin(yak.Position, 20f))
         {
             yakInRangeSinceUtc = DateTime.MinValue;
-            return string.Empty;
+            return shearingStatus;
         }
 
         var now = DateTime.UtcNow;
         if (yakInRangeSinceUtc == DateTime.MinValue)
             yakInRangeSinceUtc = now;
         if (now - yakInRangeSinceUtc < TimeSpan.FromMilliseconds(500))
-            return string.Empty;
+            return shearingStatus;
 
         if (actions.TryUseFeteAction(FateId, ClipperAction, yak, out var actionResult))
         {
             nextClipperUtc = DateTime.UtcNow.AddSeconds(8);
             yakInRangeSinceUtc = DateTime.MinValue;
-            return actionResult;
+            return actionResult.Length > 0 ? actionResult : shearingStatus;
         }
-        return string.Empty;
+        return shearingStatus;
     }
+
+    private string FleeceName => fleeceName ?? TargetName("yak-fleece");
 }

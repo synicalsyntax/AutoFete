@@ -66,6 +66,7 @@ public sealed class Plugin : IDalamudPlugin
         automation = new FeteActionAutomation(actions, navmesh, objects);
         handinDialogs = new HandinDialogs(pluginInterface);
         controller = new FeteController(clientState, objects, fates, navmesh, actions, automation, config);
+        controller.StageCompleted += OnStageCompleted;
         recorder = new CaptureRecorder(clientState, objects, fates, targets, controller, actions);
         window = new RunnerWindow(controller, recorder, config, ActiveStageLabel,
             OpenSettingsWindow, ToggleRecording,
@@ -90,6 +91,7 @@ public sealed class Plugin : IDalamudPlugin
         pluginInterface.UiBuilder.OpenMainUi -= OpenWindow;
         pluginInterface.UiBuilder.OpenConfigUi -= OpenSettingsWindow;
         commands.RemoveHandler("/autofete");
+        controller.StageCompleted -= OnStageCompleted;
         controller.Stop(StatusText.Get("Stop_PluginUnloaded"));
         handinDialogs.Dispose();
         if (recorder.IsRecording)
@@ -117,7 +119,11 @@ public sealed class Plugin : IDalamudPlugin
             .ToArray();
         var running = known.FirstOrDefault(x => x.Fate.State == FateState.Running);
         if (running.Fate != null)
-            return running.Stage!.Value.Name;
+            return StatusText.Format(
+                controller.IsAutomatingStage && controller.CurrentStage == running.Stage!.Value.Stage
+                    ? "Ui_StageAutomating"
+                    : "Ui_StageRunning",
+                running.Stage!.Value.Name);
 
         var ending = known.FirstOrDefault(x =>
             x.Fate.State == FateState.Ending && x.Stage!.Value.Stage == controller.CurrentStage);
@@ -147,6 +153,8 @@ public sealed class Plugin : IDalamudPlugin
             log.Error(e, "AutoFete update failed");
         }
     }
+
+    private void OnStageCompleted(string message) => chat.Print(message, "AutoFete");
 
     private void OnCommand(string _, string arguments)
     {

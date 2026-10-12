@@ -10,6 +10,7 @@ internal sealed class FetePresentOpener(GameActions actions)
     private int failedAttempts;
     private int opened;
     private int blockedCount = -1;
+    private bool waitingForRewards;
     private bool waitingForConsumption;
 
     public bool IsActive { get; private set; }
@@ -25,15 +26,17 @@ internal sealed class FetePresentOpener(GameActions actions)
         countBeforeUse = 0;
         failedAttempts = 0;
         opened = 0;
+        waitingForRewards = waitForRewards;
         waitingForConsumption = false;
         blockedCount = -1;
-        Status = waitForRewards ? StatusText.Get("Progress_WaitingForRewards") : StatusText.Get("Progress_OpeningPresents");
+        Status = waitForRewards ? string.Empty : StatusText.Get("Progress_OpeningPresents");
     }
 
     public void Reset()
     {
         IsActive = false;
         Status = "";
+        waitingForRewards = false;
         waitingForConsumption = false;
         blockedCount = -1;
     }
@@ -46,10 +49,7 @@ internal sealed class FetePresentOpener(GameActions actions)
         var now = DateTime.UtcNow;
         var count = GameActions.GetInventoryItemCount(PresentItemId);
         if (count < 0)
-        {
-            Status = string.Empty;
             return FinishIfTimedOut(now);
-        }
 
         if (waitingForConsumption && count < countBeforeUse)
         {
@@ -61,9 +61,12 @@ internal sealed class FetePresentOpener(GameActions actions)
 
         if (now < nextAttemptUtc)
         {
-            Status = StatusText.Get("Progress_OpeningPresents");
+            Status = waitingForRewards ? string.Empty : StatusText.Get("Progress_OpeningPresents");
             return false;
         }
+
+        waitingForRewards = false;
+        Status = StatusText.Get("Progress_OpeningPresents");
 
         if (count == 0)
         {
@@ -78,10 +81,7 @@ internal sealed class FetePresentOpener(GameActions actions)
         }
 
         if (!actions.CanUseInventoryItem)
-        {
-            Status = string.Empty;
             return false;
-        }
 
         if (GameActions.GetFreeInventorySlots() == 0)
         {

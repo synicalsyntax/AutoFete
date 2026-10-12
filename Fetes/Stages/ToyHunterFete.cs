@@ -56,10 +56,9 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
         previousToyHunterHandinCount = handInCount;
 
         if (handInCount >= GoldCount)
-        {
-            if (navmesh.IsMoving()) navmesh.Stop();
-            return string.Empty;
-        }
+            return CompleteStage(handInCount);
+
+        var collectingStatus = StatusText.Format("Progress_Collecting", StatusText.Get("Target_LuckyToy"));
 
         // A losing box transforms the player for about five seconds. Walk to
         // another box now, then wait for the status to end before interacting.
@@ -70,11 +69,13 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
             actions.ClearTarget();
             var nextBox = FindNextPresentBox(onlyTargetable: false);
             if (nextBox == null)
-                return MissingTarget("present-box", StatusText.Get("Target_PresentBox"));
+            {
+                var missingTarget = MissingTarget("present-box", TargetName("present-box"));
+                return missingTarget.Length > 0 ? missingTarget : collectingStatus;
+            }
             ClearMissingTarget();
-            if (MoveWithin(nextBox.Position, 3f, ref boxRouteDestination))
-                return string.Empty;
-            return string.Empty;
+            MoveWithin(nextBox.Position, 3f, ref boxRouteDestination);
+            return collectingStatus;
         }
 
         if (toyCount > 0)
@@ -93,7 +94,7 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
                 assumedLuckyToy = true;
             }
             else if (DateTime.UtcNow < waitingForBoxResultUntilUtc)
-                return string.Empty;
+                return collectingStatus;
             else
                 presentBoxResultPending = false;
         }
@@ -102,12 +103,14 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
         {
             var piggy = FindTarget("perky-piggy");
             if (piggy == null)
-                return MissingTarget("perky-piggy", StatusText.Get("Target_PerkyPiggy"));
+                return MissingTarget("perky-piggy", TargetName("perky-piggy"));
+            var deliveryStatus = StatusText.Format("Progress_DeliveringItemTo",
+                StatusText.Get("Target_LuckyToy"), piggy.Name);
             actions.SelectTarget(piggy);
             if (MoveWithin(piggy.Position, 3f))
-                return StatusText.Format("Progress_DeliveringTo", piggy.Name);
+                return deliveryStatus;
             if (toyCount == 0 && DateTime.UtcNow < waitingForPiggyHandinUntilUtc)
-                return string.Empty;
+                return deliveryStatus;
             if (toyCount == 0 && waitingForPiggyHandinUntilUtc != DateTime.MinValue &&
                 DateTime.UtcNow >= waitingForPiggyHandinUntilUtc)
                 assumedLuckyToy = false;
@@ -117,23 +120,26 @@ internal sealed class ToyHunterFete(GameActions actions, Navmesh navmesh, IObjec
                 {
                     waitingForPiggyHandinUntilUtc = DateTime.UtcNow.AddSeconds(6);
                 }
-                return StatusText.Format("Progress_DeliveringTo", piggy.Name);
+                return deliveryStatus;
             }
         }
 
         var box = FindNextPresentBox(onlyTargetable: true);
         if (box == null)
-            return MissingTarget("present-box", StatusText.Get("Target_PresentBox"));
+        {
+            var missingTarget = MissingTarget("present-box", TargetName("present-box"));
+            return missingTarget.Length > 0 ? missingTarget : collectingStatus;
+        }
         ClearMissingTarget();
         if (MoveWithin(box.Position, 3f, ref boxRouteDestination))
-            return string.Empty;
+            return collectingStatus;
         if (TryInteract("present-box", box))
         {
             lastOpenedBoxId = box.GameObjectId;
             waitingForBoxResultUntilUtc = DateTime.UtcNow.AddSeconds(8);
             presentBoxResultPending = true;
         }
-        return StatusText.Get("Progress_OpeningPresentBox");
+        return collectingStatus;
     }
 
     private IGameObject? FindNextPresentBox(bool onlyTargetable)

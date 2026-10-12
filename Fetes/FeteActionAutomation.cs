@@ -15,6 +15,10 @@ internal sealed class FeteActionAutomation(GameActions actions, Navmesh navmesh,
             handler.Reset();
     }
 
+    public bool IsComplete(ushort fateId) =>
+        FeteCatalog.Find(fateId) is { } definition &&
+        handlers.TryGetValue(definition.Stage, out var handler) && handler.IsComplete;
+
     public string? Tick(ushort fateId, byte handInCount)
     {
         var definition = FeteCatalog.Find(fateId);

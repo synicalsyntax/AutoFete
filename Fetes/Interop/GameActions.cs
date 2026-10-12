@@ -216,7 +216,7 @@ internal sealed unsafe class GameActions(ITargetManager targets, IObjectTable ob
         if (target is not ICharacter || !target.IsTargetable || target.Address == 0 ||
             !FeteTargets.Matches(definition.Value, action.TargetRole, target))
         {
-            result = StatusText.Format("Error_CannotFindTarget", StatusText.ActionTargetRole(action.TargetRole));
+            result = StatusText.Format("Error_CannotFindTarget", target.Name);
             return false;
         }
 

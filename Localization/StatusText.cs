@@ -25,13 +25,4 @@ internal static class StatusText
 
     public static string Format(string key, params object?[] args) =>
         string.Format(culture, Get(key), args);
-
-    public static string ActionTargetRole(string role) => role switch
-    {
-        "mighty-moogle" => Get("Target_MightyMoogle"),
-        "chirpy-chocobo" => Get("Target_ChirpyChocobo"),
-        "perky-piggy" => Get("Target_PerkyPiggy"),
-        "wooly-yak" => Get("Target_WoolyYak"),
-        _ => role,
-    };
 }

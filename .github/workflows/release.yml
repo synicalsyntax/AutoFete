@@ -1,0 +1,79 @@
+name: Build and release AutoFete
+
+on:
+  push:
+    branches: [master, main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DALAMUD_HOME: ${{ github.workspace }}/.dalamud/dev
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Download Dalamud development files
+        run: |
+          mkdir -p "$DALAMUD_HOME"
+          curl --fail --location --silent --show-error https://goatcorp.github.io/dalamud-distrib/latest.zip -o "$RUNNER_TEMP/dalamud.zip"
+          unzip -q "$RUNNER_TEMP/dalamud.zip" -d "$DALAMUD_HOME"
+      - name: Restore and build
+        run: |
+          dotnet restore AutoFete.csproj --locked-mode -p:EnableWindowsTargeting=true
+          dotnet build AutoFete.csproj --configuration Release --no-restore -p:EnableWindowsTargeting=true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutoFete-package
+          path: bin/Release/AutoFete/latest.zip
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: AutoFete-package
+          path: dist
+      - name: Generate and validate repository index
+        run: |
+          python3 tools/make_repo.py \
+            --zip dist/latest.zip \
+            --source-url "https://github.com/$GITHUB_REPOSITORY" \
+            --download-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/latest.zip" \
+            --release-tag "$GITHUB_REF_NAME" \
+            --output site/repo.json
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/latest.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/latest.zip --verify-tag --title "AutoFete $GITHUB_REF_NAME" --generate-notes
+          fi
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - name: Deploy repository index to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

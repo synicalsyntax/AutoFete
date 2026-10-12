@@ -42,20 +42,23 @@ internal sealed unsafe class CaptureRecorder(IClientState clientState, IObjectTa
 
     public void Tick()
     {
-        if (!IsRecording || DateTime.UtcNow < nextSampleUtc || samples.Count >= 10000)
+        var now = DateTime.UtcNow;
+        if (!IsRecording || now < nextSampleUtc || samples.Count >= 10000)
             return;
 
-        nextSampleUtc = DateTime.UtcNow.AddMilliseconds(250);
+        nextSampleUtc = now.AddMilliseconds(250);
         var player = objects.LocalPlayer;
         if (player == null || clientState.TerritoryType != FeteCatalog.FirmamentTerritoryId)
             return;
 
+        var selectedTarget = targets.Target;
+        var playerState = PlayerState.Instance();
         var nearby = objects
             .Where(x => x.ObjectKind != ObjectKind.Pc && Vector3.Distance(player.Position, x.Position) < 40f)
             .Select(x => new
             {
                 x.BaseId,
-                NameId = x is ICharacter character ? character.NameId : 0u,
+                NameId = ReadNameId(x),
                 x.GameObjectId,
                 Name = x.Name.ToString(),
                 Kind = x.ObjectKind.ToString(),
@@ -63,21 +66,20 @@ internal sealed unsafe class CaptureRecorder(IClientState clientState, IObjectTa
                 x.Position,
                 x.Rotation,
                 EmoteId = ReadEmoteId(x),
-                Statuses = x is IBattleChara c
-                    ? c.StatusList.Where(s => s.StatusId != 0).Select(s => s.StatusId).ToArray()
-                    : Array.Empty<uint>(),
+                Statuses = x is IBattleChara c ? ReadStatuses(c) : [],
             })
             .OrderBy(x => x.BaseId)
             .ThenBy(x => x.GameObjectId)
             .ToArray();
 
         var fateManager = FateManager.Instance();
-        var activeFete = fates.FirstOrDefault(f =>
-            (f.State == DalamudFateState.Running ||
-             f.State == DalamudFateState.Ending && controller.CurrentStage == FeteCatalog.Find(f.FateId)?.Stage) &&
-            FeteCatalog.Find(f.FateId) != null);
-        var nativeFates = fates.Select(f =>
+        var fateRows = FeteCatalog.WithDefinitions(fates);
+        var activeFete = fateRows.FirstOrDefault(x => x.Stage != null &&
+            (x.Fate.State == DalamudFateState.Running ||
+             x.Fate.State == DalamudFateState.Ending && controller.CurrentStage == x.Stage.Value.Stage));
+        var nativeFates = fateRows.Select(row =>
         {
+            var f = row.Fate;
             var native = fateManager == null ? null : fateManager->GetFateById(f.FateId);
             return new
             {
@@ -95,13 +97,13 @@ internal sealed unsafe class CaptureRecorder(IClientState clientState, IObjectTa
             Territory = clientState.TerritoryType,
             Job = player.ClassJob.RowId,
             player.Position,
-            TargetObjectId = targets.Target?.GameObjectId,
-            TargetBaseId = targets.Target?.BaseId,
-            TargetNameId = targets.Target is ICharacter selectedCharacter ? selectedCharacter.NameId : 0u,
-            TargetName = targets.Target?.Name.ToString(),
-            ActiveFeteId = activeFete?.FateId,
-            ActiveFeteStage = activeFete is null ? null : FeteCatalog.Find(activeFete.FateId)?.Stage.ToString(),
-            JoinConfirmed = activeFete != null && actions.IsJoined(activeFete.FateId),
+            TargetObjectId = selectedTarget?.GameObjectId,
+            TargetBaseId = selectedTarget?.BaseId,
+            TargetNameId = ReadNameId(selectedTarget),
+            TargetName = selectedTarget?.Name.ToString(),
+            ActiveFeteId = activeFete.Fate?.FateId,
+            ActiveFeteStage = activeFete.Stage?.Stage.ToString(),
+            JoinConfirmed = activeFete.Fate != null && actions.IsJoined(activeFete.Fate.FateId),
             ControllerArmed = controller.IsArmed,
             ControllerStage = controller.CurrentStage?.ToString(),
             ControllerStatus = controller.Status,
@@ -109,24 +111,28 @@ internal sealed unsafe class CaptureRecorder(IClientState clientState, IObjectTa
             CurrentFateId = fateManager == null ? 0 : fateManager->GetCurrentFateId(),
             FateJoined = fateManager != null && fateManager->FateJoined != 0,
             SyncedFateId = fateManager == null ? 0 : fateManager->SyncedFateId,
-            PlayerIsLevelSynced = PlayerState.Instance() != null && PlayerState.Instance()->IsLevelSynced,
+            PlayerIsLevelSynced = playerState != null && playerState->IsLevelSynced,
             YakFleeceCount = GameActions.GetKeyItemCount(ShearYakFete.YakFleeceEventItemId),
             LuckyToyCount = GameActions.GetKeyItemCount(ToyHunterFete.LuckyToyEventItemId),
             FetePresentCount = GameActions.GetInventoryItemCount(FetePresentOpener.PresentItemId),
             actions.CarryingObject,
             actions.CarryingItem,
             PlayerEmoteId = ReadEmoteId(player),
-            Statuses = player.StatusList.Where(s => s.StatusId != 0).Select(s => s.StatusId).ToArray(),
-            Fates = fates.Select(f => new
+            Statuses = ReadStatuses(player),
+            Fates = fateRows.Select(row =>
             {
-                f.FateId,
-                Name = f.Name.ToString(),
-                State = f.State.ToString(),
-                f.HandInCount,
-                f.Progress,
-                f.TimeRemaining,
-                f.Position,
-                f.Radius,
+                var f = row.Fate;
+                return new
+                {
+                    f.FateId,
+                    Name = f.Name.ToString(),
+                    State = f.State.ToString(),
+                    f.HandInCount,
+                    f.Progress,
+                    f.TimeRemaining,
+                    f.Position,
+                    f.Radius,
+                };
             }).OrderBy(x => x.FateId).ToArray(),
             NativeFates = nativeFates,
             Objects = nearby,
@@ -137,8 +143,14 @@ internal sealed unsafe class CaptureRecorder(IClientState clientState, IObjectTa
             return;
 
         lastPayload = payload;
-        samples.Add(JsonSerializer.Serialize(new { Utc = DateTime.UtcNow, Snapshot = snapshot }, JsonOptions));
+        samples.Add(JsonSerializer.Serialize(new { Utc = now, Snapshot = snapshot }, JsonOptions));
     }
+
+    private static uint ReadNameId(IGameObject? actor) =>
+        actor is ICharacter character ? character.NameId : 0u;
+
+    private static uint[] ReadStatuses(IBattleChara actor) =>
+        actor.StatusList.Where(s => s.StatusId != 0).Select(s => s.StatusId).ToArray();
 
     private static unsafe ushort? ReadEmoteId(IGameObject actor)
     {
